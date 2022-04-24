@@ -147,10 +147,10 @@ If you run into any problems while using IgFold, please create a [Github issue](
 @article{ruffolo2021deciphering,
     title = {Deciphering antibody affinity maturation with language models and weakly supervised learning},
     author = {Ruffolo, Jeffrey A and Gray, Jeffrey J and Sulam, Jeremias},
-    journal = {arXiv preprint arXiv:2112.07782},
+    journal = {arXiv},
     year= {2021}
 }
-@article{ruffolo2021deciphering,
+@article{ruffolo2022fast,
     title = {Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies},
     author = {Ruffolo, Jeffrey A, Lee-Shin Chu, Sai Pooja Mahajan, and Gray, Jeffrey J},
     journal = {bioRxiv},
