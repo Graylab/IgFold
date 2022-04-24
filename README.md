@@ -117,7 +117,7 @@ out.prmsd # Predicted RMSD for each residue's N, CA, C, CB atoms (dim: 1, L, 4)
 
 ### Antibody sequence embedding
 
-Features from IgFold may be useful as a feature for machine learning models. The `embed` method can be used to surface a variety of antibody representations from the model:
+Representations from IgFold may be useful as a feature for machine learning models. The `embed` method can be used to surface a variety of antibody representations from the model:
 
 ```python
 from igfold import IgFoldRunner
