@@ -1,0 +1,2 @@
+exclude igfold/trained_models/IgFold/*
+include igfold/resources/vocab.txt
