@@ -9,12 +9,6 @@ from igfold.utils.fasta import get_fasta_chain_dict
 from igfold.utils.general import exists
 from igfold.utils.pdb import get_atom_coords, save_PDB, write_pdb_bfactor, cdr_indices, renumber_pdb
 
-try:
-    from igfold.utils.refine import refine
-except ImportError as e:
-    print("Warning: Folding not available. You may need to install PyRosetta")
-    print(e)
-
 
 def get_sequence_dict(
     sequences,
@@ -87,6 +81,7 @@ def process_prediction(
     fasta_file,
     skip_pdb=False,
     do_refine=True,
+    use_openmm=False,
     do_renum=False,
 ):
     prmsd = rearrange(
@@ -115,6 +110,16 @@ def process_prediction(
     )
 
     if do_refine:
+        if use_openmm:
+            from igfold.refine.openmm_ref import refine
+        else:
+            try:
+                from igfold.refine.pyrosetta_ref import refine
+            except ImportError as e:
+                print("Warning: PyRosetta not available. Using OpenMM instead.")
+                print(e)
+                from igfold.refine.openmm_ref import refine
+    
         refine(pdb_file)
 
     if do_renum:
@@ -142,6 +147,7 @@ def fold(
     ignore_chain=None,
     skip_pdb=False,
     do_refine=True,
+    use_openmm=False,
     do_renum=True,
     save_decoys=False,
 ):
@@ -182,6 +188,7 @@ def fold(
                     decoy_pdb_file,
                     fasta_file,
                     do_refine=do_refine,
+                    use_openmm=use_openmm,
                     do_renum=do_renum,
                 )
 
@@ -196,6 +203,7 @@ def fold(
         fasta_file,
         skip_pdb=skip_pdb,
         do_refine=do_refine,
+        use_openmm=use_openmm,
         do_renum=do_renum,
     )
 

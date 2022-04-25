@@ -8,18 +8,22 @@ The code, data, and weights for this work are made available for non-commercial 
 
 For easiest use, install IgFold via PyPI:
 
-```
+```bash
 $ pip install igfold
 ```
 
 To access the latest version of the code, clone and install the repository:
 
-```
+```bash
 $ git clone git@github.com:Graylab/IgFold.git 
 $ pip install IgFold
 ```
 
-_Note_: To predict refined, full-atom antibody structures, PyRosetta should be installed following the instructions [here](http://pyrosetta.org/downloads).
+Two refinement methods are supported for IgFold predictions. To follow the manuscript, PyRosetta should be installed following the instructions [here](http://pyrosetta.org/downloads). If PyRosetta is not installed, refinement with OpenMM will be attempted. For this option, OpenMM must be installed and configured before running IgFold as follows:
+
+```bash
+$ conda install conda-forge openmm pdbfixer
+```
 
 ## Usage
 

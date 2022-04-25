@@ -90,6 +90,7 @@ class IgFoldRunner():
         ignore_chain=None,
         skip_pdb=False,
         do_refine=True,
+        use_openmm=False,
         do_renum=True,
         save_decoys=False,
     ):
@@ -118,6 +119,7 @@ class IgFoldRunner():
             ignore_chain=ignore_chain,
             skip_pdb=skip_pdb,
             do_refine=do_refine,
+            use_openmm=use_openmm,
             do_renum=do_renum,
             save_decoys=save_decoys,
         )
