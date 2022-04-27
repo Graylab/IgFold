@@ -33,6 +33,15 @@ def download_ckpts():
     os.system(f"tar -xzf {ckpt_tar_file} -C {ckpt_dir}")
     os.remove(ckpt_tar_file)
 
+def display_license():
+    license_url = "https://github.com/Graylab/IgFold/blob/main/LICENSE.md"
+    license_message = f"""
+    The code, data, and weights for this work are made available for non-commercial use 
+    (including at commercial entities) under the terms of the JHU Academic Software License 
+    Agreement. For commercial inquiries, please contact jruffolo[at]jhu.edu.
+    License: {license_url}
+    """
+    print(license_message)
 
 class IgFoldRunner():
     """
@@ -45,6 +54,8 @@ class IgFoldRunner():
         :param num_models: Number of pre-trained IgFold models to use for prediction.
         :param model_ckpts: List of model checkpoints to use (instead of pre-trained).
         """
+
+        display_license()
 
         if exists(model_ckpts):
             num_models = len(model_ckpts)
