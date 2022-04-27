@@ -22,7 +22,7 @@ $ pip install IgFold
 Two refinement methods are supported for IgFold predictions. To follow the manuscript, PyRosetta should be installed following the instructions [here](http://pyrosetta.org/downloads). If PyRosetta is not installed, refinement with OpenMM will be attempted. For this option, OpenMM must be installed and configured before running IgFold as follows:
 
 ```bash
-$ conda install conda-forge openmm pdbfixer
+$ conda install -c conda-forge openmm pdbfixer
 ```
 
 ## Usage
