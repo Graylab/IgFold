@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils import data
 import pytorch_lightning as pl
 from pytorch3d.transforms import quaternion_to_matrix
 
