@@ -2,7 +2,7 @@
 
 Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04.20.488972): Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies.
 
-The code, data, and weights for this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact `jruffolo[at]jhu.edu`.
+The code and weights for this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact `jruffolo[at]jhu.edu`.
 
 ## Install
 
