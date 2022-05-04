@@ -141,6 +141,14 @@ emb.gt_embs # Embeddings after graph transformer layers (dim: 1, L, 64)
 emb.strucutre_embs # Embeddings after template incorporation IPA (dim: 1, L, 64)
 ```
 
+## Synthetic antibody structures
+
+To demonstrate the capabilities of IgFold for large-scale prediction of antibody structures, we applied the model to a non-redundant set of 104,994 paired antibody sequences from the Observed Antibody Space database. These predicted structures are made available for use [online](https://data.graylab.jhu.edu/igfold_oas_paired95.tar.gz).
+
+```bash
+$ wget https://data.graylab.jhu.edu/igfold_oas_paired95.tar.gz
+```
+
 ## Bug reports
 
 If you run into any problems while using IgFold, please create a [Github issue](https://github.com/Graylab/IgFold/issues) with a description of the problem and the steps to reproduce it.
