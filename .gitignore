@@ -130,6 +130,7 @@ dmypy.json
 
 # Other
 .DS_Store
+.vscode/
 trained_models/
 demo_data/
 scripts/

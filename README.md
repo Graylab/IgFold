@@ -4,9 +4,15 @@ Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04
 
 The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact `jruffolo[at]jhu.edu`.
 
+## Updates
+
+ - Version 0.1.0
+   - Added ANARCI integration for structure renumbering.
+   - Updated PyRosetta refinement protocol to resolve clashes.
+
 ## Install
 
-For easiest use, install IgFold via PyPI:
+For easiest use, [create a conda environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) and install IgFold via PyPI:
 
 ```bash
 $ pip install igfold
@@ -19,11 +25,22 @@ $ git clone git@github.com:Graylab/IgFold.git
 $ pip install IgFold
 ```
 
+### Refinement
+
 Two refinement methods are supported for IgFold predictions. To follow the manuscript, PyRosetta should be installed following the instructions [here](http://pyrosetta.org/downloads). If PyRosetta is not installed, refinement with OpenMM will be attempted. For this option, OpenMM must be installed and configured before running IgFold as follows:
 
 ```bash
 $ conda install -c conda-forge openmm pdbfixer
 ```
+
+### Renumbering
+
+Antibody renumbering will use ANARCI by default. To install ANARCI, run the following command:
+
+```bash
+$ conda install -c bioconda anarci
+```
+If ANARCI cannot be installed, integration with the AbNum server is provided as an alternative.
 
 ## Usage
 
@@ -49,7 +66,7 @@ igfold.fold(
     pred_pdb, # Output PDB file
     sequences=sequences, # Antibody sequences
     do_refine=True, # Refine the antibody structure with PyRosetta
-    do_renum=True, # Send predicted structure to AbNum server for Chothia renumbering
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
 )
 ```
 
@@ -70,11 +87,11 @@ igfold.fold(
     pred_pdb, # Output PDB file
     sequences=sequences, # Nanobody sequence
     do_refine=True, # Refine the antibody structure with PyRosetta
-    do_renum=True, # Send predicted structure to AbNum server for Chothia renumbering
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
 )
 ```
 
-To predict a structure without PyRosetta refinement, set `do_refine=False`:
+To predict a structure without refinement, set `do_refine=False`:
 
 ```python
 from igfold import IgFoldRunner
@@ -89,7 +106,7 @@ igfold.fold(
     pred_pdb, # Output PDB file
     sequences=sequences, # Nanobody sequence
     do_refine=False, # Refine the antibody structure with PyRosetta
-    do_renum=True, # Send predicted structure to AbNum server for Chothia renumbering
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
 )
 ```
 
@@ -113,7 +130,7 @@ out = igfold.fold(
     pred_pdb, # Output PDB file
     sequences=sequences, # Antibody sequences
     do_refine=True, # Refine the antibody structure with PyRosetta
-    do_renum=True, # Send predicted structure to AbNum server for Chothia renumbering
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
 )
 
 out.prmsd # Predicted RMSD for each residue's N, CA, C, CB atoms (dim: 1, L, 4)
@@ -139,6 +156,54 @@ emb = igfold.embed(
 emb.bert_embs # Embeddings from AntiBERTy final hidden layer (dim: 1, L, 512)
 emb.gt_embs # Embeddings after graph transformer layers (dim: 1, L, 64)
 emb.strucutre_embs # Embeddings after template incorporation IPA (dim: 1, L, 64)
+```
+
+### Extra options
+
+Refinement with OpenMM can be prioritized over PyRosetta by setting `use_openmm=True`.
+
+```python
+from igfold import IgFoldRunner, init_pyrosetta
+
+init_pyrosetta()
+
+sequences = {
+    "H": "EVQLVQSGPEVKKPGTSVKVSCKASGFTFMSSAVQWVRQARGQRLEWIGWIVIGSGNTNYAQKFQERVTITRDMSTSTAYMELSSLRSEDTAVYYCAAPYCSSISCNDGFDIWGQGTMVTVS",
+    "L": "DVVMTQTPFSLPVSLGDQASISCRSSQSLVHSNGNTYLHWYLQKPGQSPKLLIYKVSNRFSGVPDRFSGSGSGTDFTLKISRVEAEDLGVYFCSQSTHVPYTFGGGTKLEIK"
+}
+pred_pdb = "my_antibody.pdb"
+
+igfold = IgFoldRunner()
+igfold.fold(
+    pred_pdb, # Output PDB file
+    sequences=sequences, # Antibody sequences
+    do_refine=True, # Refine the antibody structure with PyRosetta
+    use_openmm=True, # Use OpenMM for refinement
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
+)
+```
+
+Renumbering using the AbNum server can be prioritized over ANARCI by setting `use_abnum=True`.
+
+```python
+from igfold import IgFoldRunner, init_pyrosetta
+
+init_pyrosetta()
+
+sequences = {
+    "H": "EVQLVQSGPEVKKPGTSVKVSCKASGFTFMSSAVQWVRQARGQRLEWIGWIVIGSGNTNYAQKFQERVTITRDMSTSTAYMELSSLRSEDTAVYYCAAPYCSSISCNDGFDIWGQGTMVTVS",
+    "L": "DVVMTQTPFSLPVSLGDQASISCRSSQSLVHSNGNTYLHWYLQKPGQSPKLLIYKVSNRFSGVPDRFSGSGSGTDFTLKISRVEAEDLGVYFCSQSTHVPYTFGGGTKLEIK"
+}
+pred_pdb = "my_antibody.pdb"
+
+igfold = IgFoldRunner()
+igfold.fold(
+    pred_pdb, # Output PDB file
+    sequences=sequences, # Antibody sequences
+    do_refine=True, # Refine the antibody structure with PyRosetta
+    do_renum=True, # Renumber predicted antibody structure (Chothia)
+    use_abnum=True, # Send predicted structure to AbNum server for Chothia renumbering
+)
 ```
 
 ## Synthetic antibody structures

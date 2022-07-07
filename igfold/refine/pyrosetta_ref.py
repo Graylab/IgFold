@@ -10,12 +10,13 @@ def init_pyrosetta(init_string=None):
 
 
 def get_min_mover(
+        score_function: str = "ref2015",
         max_iter: int = 1000) -> pyrosetta.rosetta.protocols.moves.Mover:
     """
     Create full-atom minimization mover
     """
 
-    sf = pyrosetta.create_score_function('ref2015_cst')
+    sf = pyrosetta.create_score_function(score_function)
     sf.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.cart_bonded,
         1,
@@ -46,16 +47,42 @@ def get_min_mover(
     return min_mover
 
 
-def refine(pdb):
+def get_repack_mover():
+    tf = pyrosetta.rosetta.core.pack.task.TaskFactory()
+    tf.push_back(
+        pyrosetta.rosetta.core.pack.task.operation.InitializeFromCommandline())
+    tf.push_back(
+        pyrosetta.rosetta.core.pack.task.operation.RestrictToRepacking())
+
+    packer = pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover(
+    )
+    packer.task_factory(tf)
+
+    return packer
+
+
+def refine(pdb, minimization_iter=100, constrain=False, idealize=False):
     pose = pyrosetta.pose_from_pdb(pdb)
 
-    cst_mover = pyrosetta.rosetta.protocols.relax.AtomCoordinateCstMover()
-    cst_mover.cst_sidechain(False)
-    cst_mover.apply(pose)
+    if constrain:
+        cst_mover = pyrosetta.rosetta.protocols.relax.AtomCoordinateCstMover()
+        cst_mover.cst_sidechain(False)
+        cst_mover.apply(pose)
 
-    min_mover = get_min_mover(50)
+    min_mover = get_min_mover(max_iter=minimization_iter)
     min_mover.apply(pose)
-    idealize_mover = pyrosetta.rosetta.protocols.idealize.IdealizeMover()
-    idealize_mover.apply(pose)
+
+    if idealize:
+        idealize_mover = pyrosetta.rosetta.protocols.idealize.IdealizeMover()
+        idealize_mover.apply(pose)
+
+    packer = get_repack_mover()
+    packer.apply(pose)
+
+    if constrain:
+        min_mover = get_min_mover(score_function="ref2015_cst",
+                                  max_iter=minimization_iter)
+
+    min_mover.apply(pose)
 
     pose.dump_pdb(pdb)

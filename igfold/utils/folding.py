@@ -7,7 +7,7 @@ import numpy as np
 from igfold.model.interface import IgFoldInput
 from igfold.utils.fasta import get_fasta_chain_dict
 from igfold.utils.general import exists
-from igfold.utils.pdb import get_atom_coords, save_PDB, write_pdb_bfactor, cdr_indices, renumber_pdb
+from igfold.utils.pdb import get_atom_coords, save_PDB, write_pdb_bfactor, cdr_indices
 
 
 def get_sequence_dict(
@@ -83,6 +83,7 @@ def process_prediction(
     do_refine=True,
     use_openmm=False,
     do_renum=False,
+    use_abnum=False,
 ):
     prmsd = rearrange(
         model_out.prmsd,
@@ -116,13 +117,26 @@ def process_prediction(
             try:
                 from igfold.refine.pyrosetta_ref import refine
             except ImportError as e:
-                print("Warning: PyRosetta not available. Using OpenMM instead.")
+                print(
+                    "Warning: PyRosetta not available. Using OpenMM instead.")
                 print(e)
                 from igfold.refine.openmm_ref import refine
-    
+
         refine(pdb_file)
 
     if do_renum:
+        if use_abnum:
+            from igfold.utils.pdb import renumber_pdb
+        else:
+            try:
+                from igfold.utils.anarci_ import renumber_pdb
+            except ImportError as e:
+                print(
+                    "Warning: ANARCI not available. Provide --use_abnum to renumber with the AbNum server."
+                )
+                print(e)
+                renumber_pdb = lambda x, y: None
+
         renumber_pdb(
             pdb_file,
             pdb_file,
@@ -149,6 +163,7 @@ def fold(
     do_refine=True,
     use_openmm=False,
     do_renum=True,
+    use_abnum=False,
     save_decoys=False,
 ):
     seq_dict = get_sequence_dict(
@@ -190,6 +205,7 @@ def fold(
                     do_refine=do_refine,
                     use_openmm=use_openmm,
                     do_renum=do_renum,
+                    use_abnum=use_abnum,
                 )
 
             scores.append(model_out.prmsd.quantile(0.9))
@@ -205,6 +221,7 @@ def fold(
         do_refine=do_refine,
         use_openmm=use_openmm,
         do_renum=do_renum,
+        use_abnum=use_abnum,
     )
 
     return model_out

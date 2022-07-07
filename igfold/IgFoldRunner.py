@@ -33,6 +33,7 @@ def download_ckpts():
     os.system(f"tar -xzf {ckpt_tar_file} -C {ckpt_dir}")
     os.remove(ckpt_tar_file)
 
+
 def display_license():
     license_url = "https://github.com/Graylab/IgFold/blob/main/LICENSE.md"
     license_message = f"""
@@ -42,6 +43,7 @@ def display_license():
     License: {license_url}
     """
     print(license_message)
+
 
 class IgFoldRunner():
     """
@@ -103,6 +105,7 @@ class IgFoldRunner():
         do_refine=True,
         use_openmm=False,
         do_renum=True,
+        use_abnum=False,
         save_decoys=False,
     ):
         """
@@ -132,6 +135,7 @@ class IgFoldRunner():
             do_refine=do_refine,
             use_openmm=use_openmm,
             do_renum=do_renum,
+            use_abnum=use_abnum,
             save_decoys=save_decoys,
         )
 
