@@ -4,6 +4,8 @@ Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04
 
 The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact `jruffolo[at]jhu.edu`.
 
+Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb).
+
 ## Updates
 
  - Version 0.1.0
