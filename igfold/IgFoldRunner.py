@@ -2,6 +2,8 @@ import os
 import urllib
 from time import time
 from glob import glob
+
+import boto3
 import torch
 
 import igfold
@@ -18,7 +20,11 @@ def download_ckpts():
     print("Downloading checkpoint files...")
 
     tar_file = "IgFold.tar.gz"
-    ckpt_url = f"https://data.graylab.jhu.edu/{tar_file}"
+    # original: ckpt_url = f"https://data.graylab.jhu.edu/{tar_file}"
+    # bighat start
+    s3_bucket = "332120041740-bighat-datasets"
+    s3_key = "/ModelParameters/IgFold.tar.gz"
+    # bighat end
 
     project_path = os.path.dirname(os.path.realpath(igfold.__file__))
     ckpt_dir = os.path.join(
@@ -29,7 +35,11 @@ def download_ckpts():
 
     ckpt_tar_file = os.path.join(project_path, tar_file)
 
-    urllib.request.urlretrieve(ckpt_url, ckpt_tar_file)
+    # original: urllib.request.urlretrieve(ckpt_url, ckpt_tar_file)
+    # bighat start
+    s3 = boto3.resource("s3")
+    s3.meta.client.download_file(s3_bucket, s3_key, ckpt_tar_file)
+    # bighat end
     os.system(f"tar -xzf {ckpt_tar_file} -C {ckpt_dir}")
     os.remove(ckpt_tar_file)
 
