@@ -10,7 +10,7 @@ Try antibody structure prediction in [Google Colab](https://colab.research.googl
 
  - Version 0.1.1
    - Added AbNumber integration for structure renumbering.
-   - Constraint PyRosetta refinement to stay closer to model output.
+   - Constrained PyRosetta refinement to stay closer to model output.
 
 ## Install
 
