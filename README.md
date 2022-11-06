@@ -8,9 +8,9 @@ Try antibody structure prediction in [Google Colab](https://colab.research.googl
 
 ## Updates
 
- - Version 0.1.0
-   - Added ANARCI integration for structure renumbering.
-   - Updated PyRosetta refinement protocol to resolve clashes.
+ - Version 0.1.1
+   - Added AbNumber integration for structure renumbering.
+   - Constraint PyRosetta refinement to stay closer to model output.
 
 ## Install
 
@@ -37,12 +37,12 @@ $ conda install -c conda-forge openmm pdbfixer
 
 ### Renumbering
 
-Antibody renumbering will use ANARCI by default. To install ANARCI, run the following command:
+Antibody renumbering will use AbNumber by default. To install AbNumber, run the following command:
 
 ```bash
-$ conda install -c bioconda anarci
+$ conda install -c bioconda abnumber
 ```
-If ANARCI cannot be installed, integration with the AbNum server is provided as an alternative.
+If AbNumber cannot be installed, integration with the AbNum server is provided as an alternative.
 
 ## Usage
 
@@ -185,7 +185,7 @@ igfold.fold(
 )
 ```
 
-Renumbering using the AbNum server can be prioritized over ANARCI by setting `use_abnum=True`.
+Renumbering using the AbNum server can be prioritized over AbNumber by setting `use_abnum=True`.
 
 ```python
 from igfold import IgFoldRunner, init_pyrosetta

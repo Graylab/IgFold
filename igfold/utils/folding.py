@@ -129,10 +129,10 @@ def process_prediction(
             from igfold.utils.pdb import renumber_pdb
         else:
             try:
-                from igfold.utils.anarci_ import renumber_pdb
+                from igfold.utils.abnumber_ import renumber_pdb
             except ImportError as e:
                 print(
-                    "Warning: ANARCI not available. Provide --use_abnum to renumber with the AbNum server."
+                    "Warning: AbNumber not available. Provide --use_abnum to renumber with the AbNum server."
                 )
                 print(e)
                 renumber_pdb = lambda x, y: None
