@@ -3,7 +3,6 @@ from abnumber import Chain
 from Bio.PDB import PDBParser, PDBIO
 from Bio.SeqUtils import seq1
 
-from igfold.utils.pdb import clean_pdb
 
 
 def is_heavy(seq):
