@@ -45,8 +45,6 @@ def renumber_pdb(
     if out_pdb_file is None:
         out_pdb_file = in_pdb_file
 
-    clean_pdb(in_pdb_file)
-
     parser = PDBParser()
     with warnings.catch_warnings(record=True):
         structure = parser.get_structure(
