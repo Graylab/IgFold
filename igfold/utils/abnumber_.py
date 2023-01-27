@@ -3,6 +3,7 @@ from abnumber import Chain
 from Bio.PDB import PDBParser, PDBIO
 from Bio.SeqUtils import seq1
 
+from igfold.utils.pdb import clean_pdb
 
 
 def is_heavy(seq):
@@ -44,6 +45,8 @@ def renumber_pdb(
     if out_pdb_file is None:
         out_pdb_file = in_pdb_file
 
+    clean_pdb(in_pdb_file)
+
     parser = PDBParser()
     with warnings.catch_warnings(record=True):
         structure = parser.get_structure(
@@ -75,3 +78,11 @@ def renumber_pdb(
     io = PDBIO()
     io.set_structure(structure)
     io.save(out_pdb_file)
+
+
+def truncate_seq(seq, scheme="chothia"):
+    abnum_chain = Chain(seq, scheme=scheme)
+    numbering = abnum_chain.positions.items()
+    seq = "".join([r[1] for r in list(numbering)])
+
+    return seq

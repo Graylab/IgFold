@@ -10,8 +10,10 @@ def init_pyrosetta(init_string=None, silent=True):
 
 
 def get_min_mover(
-        max_iter: int = 1000,
-        sf_name: str = "ref2015_cst"
+    max_iter: int = 1000,
+    sf_name: str = "ref2015_cst",
+    coord_cst_weight: float = 1,
+    dih_cst_weight: float = 1,
 ) -> pyrosetta.rosetta.protocols.moves.Mover:
     """
     Create full-atom minimization mover
@@ -28,7 +30,11 @@ def get_min_mover(
     )
     sf.set_weight(
         pyrosetta.rosetta.core.scoring.ScoreType.coordinate_constraint,
-        1,
+        coord_cst_weight,
+    )
+    sf.set_weight(
+        pyrosetta.rosetta.core.scoring.ScoreType.dihedral_constraint,
+        dih_cst_weight,
     )
 
     mmap = pyrosetta.rosetta.core.kinematics.MoveMap()
@@ -49,7 +55,7 @@ def get_min_mover(
 
 
 def get_fa_relax_mover(
-        max_iter: int = 200) -> pyrosetta.rosetta.protocols.moves.Mover:
+        max_iter: int = 100) -> pyrosetta.rosetta.protocols.moves.Mover:
     """
     Create full-atom relax mover
     """
@@ -83,21 +89,37 @@ def get_repack_mover():
     return packer
 
 
-def refine(pdb, minimization_iter=100, constrain=True, idealize=False):
-    pose = pyrosetta.pose_from_pdb(pdb)
+def refine(out_pdb_file,
+           pdb_string,
+           minimization_iter=100,
+           constrain=True,
+           idealize=False):
+    # create new pose
+    pose = pyrosetta.rosetta.core.pose.Pose()
+    pyrosetta.rosetta.core.import_pose.pose_from_pdbstring(
+        pose,
+        pdb_string,
+    )
 
     if constrain:
         cst_mover = pyrosetta.rosetta.protocols.relax.AtomCoordinateCstMover()
         cst_mover.cst_sidechain(False)
         cst_mover.apply(pose)
-    min_mover = get_min_mover(max_iter=minimization_iter)
+
+    min_mover = get_min_mover(
+        max_iter=minimization_iter,
+        coord_cst_weight=1,
+        dih_cst_weight=0,
+    )
     min_mover.apply(pose)
+
     if idealize:
         idealize_mover = pyrosetta.rosetta.protocols.idealize.IdealizeMover()
         idealize_mover.apply(pose)
+
     packer = get_repack_mover()
     packer.apply(pose)
 
     min_mover.apply(pose)
 
-    pose.dump_pdb(pdb)
+    pose.dump_pdb(out_pdb_file)

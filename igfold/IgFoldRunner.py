@@ -39,7 +39,7 @@ def display_license():
     license_message = f"""
     The code, data, and weights for this work are made available for non-commercial use 
     (including at commercial entities) under the terms of the JHU Academic Software License 
-    Agreement. For commercial inquiries, please contact jruffolo[at]jhu.edu.
+    Agreement. For commercial inquiries, please contact dmalon11[at]jhu.edu.
     License: {license_url}
     """
     print(license_message)
@@ -105,8 +105,8 @@ class IgFoldRunner():
         do_refine=True,
         use_openmm=False,
         do_renum=True,
-        use_abnum=False,
         save_decoys=False,
+        truncate_sequences=False,
     ):
         """
         Predict antibody structure with IgFold.
@@ -121,6 +121,7 @@ class IgFoldRunner():
         :param do_refine: Perform PyRosetta refinement.
         :param do_renum: Renumber PDB to Chothia with AbNum.
         :param save_decoys: Save decoys.
+        :param truncate_sequences: Truncate sequences with AbNumber.
         """
         start_time = time()
         model_out = fold(
@@ -135,8 +136,8 @@ class IgFoldRunner():
             do_refine=do_refine,
             use_openmm=use_openmm,
             do_renum=do_renum,
-            use_abnum=use_abnum,
             save_decoys=save_decoys,
+            truncate_sequences=truncate_sequences,
         )
 
         print(f"Completed folding in {time() - start_time:.2f} seconds.")

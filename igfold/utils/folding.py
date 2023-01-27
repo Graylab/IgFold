@@ -55,9 +55,9 @@ def process_template(
             cdr_names = ["h1", "h2", "h3", "l1", "l2", "l3"]
             if ignore_cdrs == False:
                 cdr_names = []
-            elif type(ignore_cdrs) == List:
+            elif isinstance(ignore_cdrs, list):
                 cdr_names = ignore_cdrs
-            elif type(ignore_cdrs) == str:
+            elif isinstance(ignore_cdrs, str):
                 cdr_names = [ignore_cdrs]
 
             for cdr in cdr_names:
@@ -83,7 +83,6 @@ def process_prediction(
     do_refine=True,
     use_openmm=False,
     do_renum=False,
-    use_abnum=False,
 ):
     prmsd = rearrange(
         model_out.prmsd,
@@ -100,15 +99,8 @@ def process_prediction(
 
     seq_dict = get_fasta_chain_dict(fasta_file)
     full_seq = "".join(list(seq_dict.values()))
+    chains = list(seq_dict.keys())
     delims = np.cumsum([len(s) for s in seq_dict.values()]).tolist()
-    save_PDB(
-        pdb_file,
-        coords,
-        full_seq,
-        atoms=['N', 'CA', 'C', 'CB', 'O'],
-        error=res_rmsd,
-        delim=delims,
-    )
 
     if do_refine:
         if use_openmm:
@@ -116,27 +108,32 @@ def process_prediction(
         else:
             try:
                 from igfold.refine.pyrosetta_ref import refine
+                refine_input = [pdb_file, pdb_string]
             except ImportError as e:
                 print(
                     "Warning: PyRosetta not available. Using OpenMM instead.")
                 print(e)
                 from igfold.refine.openmm_ref import refine
+                refine_input = [pdb_file]
+                use_openmm = True
 
-        refine(pdb_file)
+    write_pdb = not do_refine or use_openmm
+    pdb_string = save_PDB(
+        pdb_file,
+        coords,
+        full_seq,
+        chains=chains,
+        atoms=['N', 'CA', 'C', 'CB', 'O'],
+        error=res_rmsd,
+        delim=delims,
+        write_pdb=write_pdb,
+    )
+
+    if do_refine:
+        refine(*refine_input)
 
     if do_renum:
-        if use_abnum:
-            from igfold.utils.pdb import renumber_pdb
-        else:
-            try:
-                from igfold.utils.abnumber_ import renumber_pdb
-            except ImportError as e:
-                print(
-                    "Warning: AbNumber not available. Provide --use_abnum to renumber with the AbNum server."
-                )
-                print(e)
-                renumber_pdb = lambda x, y: None
-
+        from igfold.utils.abnumber_ import renumber_pdb
         renumber_pdb(
             pdb_file,
             pdb_file,
@@ -163,13 +160,18 @@ def fold(
     do_refine=True,
     use_openmm=False,
     do_renum=True,
-    use_abnum=False,
     save_decoys=False,
+    truncate_sequences=False,
 ):
     seq_dict = get_sequence_dict(
         sequences,
         fasta_file,
     )
+
+    if truncate_sequences:
+        from igfold.utils.abnumber_ import truncate_seq
+        seq_dict = {k: truncate_seq(v) for k, v in seq_dict.items()}
+
     if not exists(fasta_file):
         fasta_file = pdb_file.replace(".pdb", ".fasta")
         with open(fasta_file, "w") as f:
@@ -189,6 +191,7 @@ def fold(
         sequences=seq_dict.values(),
         template_coords=temp_coords,
         template_mask=temp_mask,
+        return_embeddings=True,
     )
 
     model_outs, scores = [], []
@@ -205,9 +208,9 @@ def fold(
                     do_refine=do_refine,
                     use_openmm=use_openmm,
                     do_renum=do_renum,
-                    use_abnum=use_abnum,
                 )
 
+            model_out = model.gradient_refine(model_in, model_out)
             scores.append(model_out.prmsd.quantile(0.9))
             model_outs.append(model_out)
 
@@ -221,7 +224,6 @@ def fold(
         do_refine=do_refine,
         use_openmm=use_openmm,
         do_renum=do_renum,
-        use_abnum=use_abnum,
     )
 
     return model_out

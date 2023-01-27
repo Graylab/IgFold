@@ -11,6 +11,7 @@ def embed(
     template_pdb=None,
     ignore_cdrs=None,
     ignore_chain=None,
+    mask=None,
 ):
     seq_dict = get_sequence_dict(
         sequences,
@@ -28,6 +29,7 @@ def embed(
         template_coords=temp_coords,
         template_mask=temp_mask,
         return_embeddings=True,
+        batch_mask=mask,
     )
 
     model_out = model(model_in)

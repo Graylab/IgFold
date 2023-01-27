@@ -5,6 +5,7 @@ from typing import Union, List
 import requests
 import warnings
 from os.path import splitext, basename
+from Bio import PDB
 from Bio.PDB import PDBParser, PDBIO
 from Bio.SeqUtils import seq1
 from Bio import SeqIO
@@ -17,7 +18,10 @@ from igfold.utils.fasta import get_fasta_chain_seq
 from igfold.utils.general import _aa_1_3_dict, exists
 
 
-def renumber_pdb(old_pdb, renum_pdb):
+def renumber_pdb(old_pdb, renum_pdb=None):
+    if not exists(renum_pdb):
+        renum_pdb = old_pdb
+
     success = False
     time.sleep(5)
     for i in range(10):
@@ -54,14 +58,76 @@ def renumber_pdb(old_pdb, renum_pdb):
         )
 
 
+def count_pdb_chains(pdb_file):
+    parser = PDBParser()
+    with warnings.catch_warnings(record=True):
+        structure = parser.get_structure("_", pdb_file)
+
+    l = len(list(structure.get_chains()))
+
+    return l
+
+
+def reorder_pdb_chains(pdb_file, chain_order):
+    """Reorder the chains in a PDB file and update residue numbers"""
+
+    parser = PDBParser()
+    with warnings.catch_warnings(record=True):
+        structure = parser.get_structure("_", pdb_file)
+
+    chains = list(structure.get_chains())
+    if len(chains) != len(chain_order):
+        raise ValueError(
+            f"Number of chains in PDB file ({len(chains)}) does not match number of chains in chain order ({len(chain_order)})"
+        )
+
+    chain_order = [c.upper() for c in chain_order]
+    sorted_chains = sorted(chains, key=lambda c: chain_order.index(c.id))
+
+    new_structure = PDB.Structure.Structure("_")
+    new_model = PDB.Model.Model(0)
+    new_structure.add(new_model)
+    atom_num = 1
+    for chain in sorted_chains:
+        new_chain = PDB.Chain.Chain(chain.id)
+        new_model.add(new_chain)
+        for residue in chain.get_residues():
+            new_residue = PDB.Residue.Residue(
+                residue.id,
+                residue.resname,
+                residue.segid,
+            )
+            new_chain.add(new_residue)
+            for atom in residue:
+                new_atom = PDB.Atom.Atom(
+                    atom.name,
+                    atom.coord,
+                    atom.occupancy,
+                    atom.bfactor,
+                    atom.altloc,
+                    atom.fullname,
+                    atom_num,
+                    atom.element,
+                )
+                new_residue.add(new_atom)
+                atom_num += 1
+
+    io = PDBIO()
+    io.set_structure(new_structure)
+    io.save(pdb_file)
+
+
 def get_atom_coord(residue, atom_type):
-    if atom_type in residue:
+    if exists(residue) and atom_type in residue:
         return residue[atom_type].get_coord()
     else:
         return [0, 0, 0]
 
 
 def get_cb_or_ca_coord(residue):
+    if not exists(residue):
+        return [0, 0, 0]
+
     if 'CB' in residue:
         return residue['CB'].get_coord()
     elif 'CA' in residue:
@@ -150,7 +216,7 @@ def get_atom_coords(pdb_file, fasta_file=None):
             chain_residues = list(chain.get_residues())
             continuous_ranges = get_continuous_ranges(chain_residues)
 
-            fasta_residues = [[]] * len(fasta_seq)
+            fasta_residues = [None for _ in range(len(fasta_seq))]
             fasta_r = (0, 0)
             for pdb_r in continuous_ranges:
                 fasta_r_start = fasta_seq[fasta_r[1]:].index(
@@ -229,21 +295,20 @@ def get_pdb_chain_seq(
     pdb_file,
     chain_id,
 ):
-    raw_fasta = pdb2fasta(pdb_file)
-    fasta = SeqIO.parse(
-        io.StringIO(raw_fasta),
-        'fasta',
+    p = PDBParser()
+    file_name = splitext(basename(pdb_file))[0]
+    structure = p.get_structure(
+        file_name,
+        pdb_file,
     )
-    chain_sequences = {
-        chain.id.split(':')[1]: str(chain.seq)
-        for chain in fasta
-    }
-    if chain_id not in chain_sequences.keys():
-        print(
-            "No such chain in PDB file. Chain must have a chain ID of \"[PDB ID]:{}\""
-            .format(chain_id))
-        return None
-    return chain_sequences[chain_id]
+
+    pdb_seq = None
+    for chain in structure.get_chains():
+        if chain.id == chain_id:
+            pdb_seq = "".join(
+                [seq1(r.get_resname()) for r in chain.get_residues()])
+
+    return pdb_seq
 
 
 def cdr_indices(
@@ -368,6 +433,7 @@ def save_PDB(
     error: torch.Tensor = None,
     delim: Union[int, List[int]] = None,
     atoms=['N', 'CA', 'C', 'O', 'CB'],
+    write_pdb=True,
 ) -> None:
     """
     Write set of N, CA, C, O, CB coords to PDB file
@@ -384,20 +450,23 @@ def save_PDB(
     if not exists(error):
         error = torch.zeros(len(seq))
 
-    with open(out_pdb, "w") as f:
-        k = 0
-        for r, residue in enumerate(coords):
-            AA = _aa_1_3_dict[seq[r]]
-            for a, atom in enumerate(residue):
-                if AA == "GLY" and atoms[a] == "CB": continue
-                x, y, z = atom
-                chain_id = chains[np.where(np.array(delim) - r > 0)[0][0]]
-                f.write(
-                    "ATOM  %5d  %-2s  %3s %s%4d    %8.3f%8.3f%8.3f  %4.2f  %4.2f\n"
-                    % (k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1,
-                       error[r]))
-                k += 1
-        f.close()
+    pdb_string = ""
+    k = 0
+    for r, residue in enumerate(coords):
+        AA = _aa_1_3_dict[seq[r]]
+        for a, atom in enumerate(residue):
+            if AA == "GLY" and atoms[a] == "CB": continue
+            x, y, z = atom
+            chain_id = chains[np.where(np.array(delim) - r > 0)[0][0]]
+            pdb_string += "ATOM  %5d  %-2s  %3s %s%4d    %8.3f%8.3f%8.3f  %4.2f  %4.2f\n" % (
+                k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1, error[r])
+            k += 1
+
+    if write_pdb:
+        with open(out_pdb, "w") as f:
+            f.write(pdb_string)
+
+    return pdb_string
 
 
 def write_pdb_bfactor(
@@ -425,3 +494,13 @@ def write_pdb_bfactor(
     io = PDBIO()
     io.set_structure(structure)
     io.save(out_pdb_file)
+
+
+def clean_pdb(pdb_file):
+    with open(pdb_file, "r") as f:
+        lines = f.readlines()
+
+    with open(pdb_file, "w") as f:
+        for l in lines:
+            if "ATOM" in l:
+                f.write(l)

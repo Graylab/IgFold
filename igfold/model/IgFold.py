@@ -9,9 +9,8 @@ from pytorch3d.transforms import quaternion_to_matrix
 
 from igfold.model.interface import *
 from igfold.model.components import TriangleGraphTransformer, IPAEncoder, IPATransformer
-from igfold.utils.coordinates import get_ideal_coords
+from igfold.utils.coordinates import get_ideal_coords, place_o_coords
 from igfold.training.utils import *
-
 from igfold.utils.general import exists
 
 ATOM_DIM = 3
@@ -167,15 +166,15 @@ class IgFold(pl.LightningModule):
         temp_coords,
         batch_size,
         seq_len,
-        center=True,
     ):
         res_coords = rearrange(
             temp_coords,
             "b (l a) d -> b l a d",
             l=seq_len,
-        )
+        ).to(self.device)
+        ideal_coords = get_ideal_coords()
         res_ideal_coords = repeat(
-            get_ideal_coords(center=center),
+            ideal_coords,
             "a d -> b l a d",
             b=batch_size,
             l=seq_len,
@@ -267,12 +266,12 @@ class IgFold(pl.LightningModule):
             batch_mask,
             "b (l a) -> b l a",
             a=4,
-        ).all(-1)
+        ).all(-1).to(self.device)
         res_temp_mask = rearrange(
             temp_mask,
             "b (l a) -> b l a",
             a=4,
-        ).all(-1)
+        ).all(-1).to(self.device)
 
         ### Model forward pass
 
@@ -412,6 +411,7 @@ class IgFold(pl.LightningModule):
 
         bert_hidden = bert_hidden if return_embeddings else None
         bert_embs = bert_feats if return_embeddings else None
+        bert_attn = bert_attn if return_embeddings else None
         gt_embs = gt_embs if return_embeddings else None
         structure_embs = structure_embs if return_embeddings else None
         output = IgFoldOutput(
@@ -425,8 +425,127 @@ class IgFold(pl.LightningModule):
             loss=loss,
             bert_hidden=bert_hidden,
             bert_embs=bert_embs,
+            bert_attn=bert_attn,
             gt_embs=gt_embs,
             structure_embs=structure_embs,
         )
+
+        return output
+    
+    def score_coords(
+        self,
+        input: IgFoldInput,
+        output: IgFoldOutput,
+    ):
+        input, _, _, _ = self.clean_input(input)
+        batch_mask = input.batch_mask
+
+        res_batch_mask = rearrange(
+            batch_mask,
+            "b (l a) -> b l a",
+            a=4,
+        ).all(-1)
+
+        str_translations, str_rotations = output.translations, output.rotations
+
+        bert_feats = output.bert_embs
+        bert_attn = output.bert_attn
+
+        dev_nodes = self.dev_node_transform(bert_feats)
+        dev_edges = self.dev_edge_transform(bert_attn)
+        dev_out_feats = self.dev_ipa(
+            dev_nodes,
+            translations=str_translations.detach(),
+            rotations=str_rotations.detach(),
+            pairwise_repr=dev_edges,
+            mask=res_batch_mask,
+        )
+        dev_pred = F.relu(self.dev_linear(dev_out_feats)).squeeze(-1)
+        dev_pred = rearrange(dev_pred, "b l a -> b (l a)", a=4)
+
+        return dev_pred
+
+    def transform_ideal_coords(self, translations, rotations):
+        b, n, d = translations.shape
+        device = translations.device
+
+        ideal_coords = get_ideal_coords().to(device)
+        ideal_coords = repeat(
+            ideal_coords,
+            "a d -> b l a d",
+            b=b,
+            l=n,
+        )
+        points_global = torch.einsum(
+            'b n a c, b n c d -> b n a d',
+            ideal_coords,
+            rotations,
+        ) + rearrange(
+            translations,
+            "b l d -> b l () d",
+        )
+
+        return points_global
+
+    def gradient_refine(
+        self,
+        input: IgFoldInput,
+        output: IgFoldOutput,
+        num_steps: int = 80,
+    ):
+        input_, _, seq_lens, _ = self.clean_input(input)
+        batch_mask = input_.batch_mask
+        res_batch_mask = rearrange(
+            batch_mask,
+            "b (l a) -> b l a",
+            a=4,
+        ).all(-1)
+        translations, rotations = output.translations, output.rotations
+
+        in_coords = self.transform_ideal_coords(translations,
+                                                rotations).detach()
+        in_flat_coords = rearrange(
+            in_coords[:, :, :4],
+            "b l a d -> b (l a) d",
+        )
+
+        with torch.enable_grad():
+            translations.requires_grad = True
+            rotations.requires_grad = True
+
+            translations = nn.parameter.Parameter(translations)
+            rotations = nn.parameter.Parameter(rotations)
+
+            optimizer = torch.optim.Adam([translations, rotations], lr=2e-2)
+            for _ in range(num_steps):
+                optimizer.zero_grad()
+
+                coords = self.transform_ideal_coords(translations, rotations)
+                viol_loss = violation_loss(coords, seq_lens, res_batch_mask)
+
+                flat_coords = rearrange(
+                    coords[:, :, :4],
+                    "b l a d -> b (l a) d",
+                )
+                rmsd = kabsch_mse(
+                    flat_coords,
+                    in_flat_coords,
+                    align_mask=batch_mask,
+                    mask=batch_mask,
+                )
+
+                output.translations = translations
+                output.rotations = rotations
+
+                loss = rmsd + viol_loss
+
+                loss.backward()
+                optimizer.step()
+
+        prmsd = self.score_coords(input, output)
+
+        coords = place_o_coords(coords)
+        output.coords = coords
+        output.prmsd = prmsd
 
         return output

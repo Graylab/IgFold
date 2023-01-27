@@ -35,5 +35,6 @@ class IgFoldOutput():
     loss: Optional[torch.FloatTensor] = None
     bert_hidden: Optional[torch.FloatTensor] = None
     bert_embs: Optional[torch.FloatTensor] = None
+    bert_attn: Optional[torch.FloatTensor] = None
     gt_embs: Optional[torch.FloatTensor] = None
     structure_embs: Optional[torch.FloatTensor] = None
