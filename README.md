@@ -2,15 +2,14 @@
 
 Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04.20.488972): Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies.
 
-The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact Johns Hopkins Tech Ventures at `dmalon11@jhu.edu`.
+The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact `jruffolo[at]jhu.edu`.
 
-Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb).
+<!-- Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb). -->
 
 ## Updates
 
- - Version 0.1.1
-   - Added AbNumber integration for structure renumbering.
-   - Constrained PyRosetta refinement to stay closer to model output.
+ - Version 0.2.0
+   - Add gradient-based refinement to resolve clashes and improve backbone geometry.
 
 ## Install
 
@@ -37,12 +36,11 @@ $ conda install -c conda-forge openmm pdbfixer
 
 ### Renumbering
 
-Antibody renumbering will use AbNumber by default. To install AbNumber, run the following command:
+Antibody renumbering requires installation of AbNumber. To install AbNumber, run the following command:
 
 ```bash
 $ conda install -c bioconda abnumber
 ```
-If AbNumber cannot be installed, integration with the AbNum server is provided as an alternative.
 
 ## Usage
 
@@ -182,29 +180,6 @@ igfold.fold(
     do_refine=True, # Refine the antibody structure with PyRosetta
     use_openmm=True, # Use OpenMM for refinement
     do_renum=True, # Renumber predicted antibody structure (Chothia)
-)
-```
-
-Renumbering using the AbNum server can be prioritized over AbNumber by setting `use_abnum=True`.
-
-```python
-from igfold import IgFoldRunner, init_pyrosetta
-
-init_pyrosetta()
-
-sequences = {
-    "H": "EVQLVQSGPEVKKPGTSVKVSCKASGFTFMSSAVQWVRQARGQRLEWIGWIVIGSGNTNYAQKFQERVTITRDMSTSTAYMELSSLRSEDTAVYYCAAPYCSSISCNDGFDIWGQGTMVTVS",
-    "L": "DVVMTQTPFSLPVSLGDQASISCRSSQSLVHSNGNTYLHWYLQKPGQSPKLLIYKVSNRFSGVPDRFSGSGSGTDFTLKISRVEAEDLGVYFCSQSTHVPYTFGGGTKLEIK"
-}
-pred_pdb = "my_antibody.pdb"
-
-igfold = IgFoldRunner()
-igfold.fold(
-    pred_pdb, # Output PDB file
-    sequences=sequences, # Antibody sequences
-    do_refine=True, # Refine the antibody structure with PyRosetta
-    do_renum=True, # Renumber predicted antibody structure (Chothia)
-    use_abnum=True, # Send predicted structure to AbNum server for Chothia renumbering
 )
 ```
 
