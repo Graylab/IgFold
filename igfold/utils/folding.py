@@ -102,21 +102,6 @@ def process_prediction(
     chains = list(seq_dict.keys())
     delims = np.cumsum([len(s) for s in seq_dict.values()]).tolist()
 
-    if do_refine:
-        if use_openmm:
-            from igfold.refine.openmm_ref import refine
-        else:
-            try:
-                from igfold.refine.pyrosetta_ref import refine
-                refine_input = [pdb_file, pdb_string]
-            except ImportError as e:
-                print(
-                    "Warning: PyRosetta not available. Using OpenMM instead.")
-                print(e)
-                from igfold.refine.openmm_ref import refine
-                refine_input = [pdb_file]
-                use_openmm = True
-
     write_pdb = not do_refine or use_openmm
     pdb_string = save_PDB(
         pdb_file,
@@ -130,6 +115,19 @@ def process_prediction(
     )
 
     if do_refine:
+        if use_openmm:
+            try:
+                from igfold.refine.openmm_ref import refine
+                refine_input = [pdb_file]
+            except:
+                exit("OpenMM not installed. Please install OpenMM to use refinement.")
+        else:
+            try:
+                from igfold.refine.pyrosetta_ref import refine
+                refine_input = [pdb_file, pdb_string]
+            except:
+                exit("PyRosetta not installed. Please install PyRosetta to use refinement.")
+
         refine(*refine_input)
 
     if do_renum:
