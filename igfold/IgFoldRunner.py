@@ -105,7 +105,6 @@ class IgFoldRunner():
         do_refine=True,
         use_openmm=False,
         do_renum=True,
-        save_decoys=False,
         truncate_sequences=False,
     ):
         """
@@ -120,7 +119,6 @@ class IgFoldRunner():
         :param skip_pdb: Skip PDB processing.
         :param do_refine: Perform PyRosetta refinement.
         :param do_renum: Renumber PDB to Chothia with AbNum.
-        :param save_decoys: Save decoys.
         :param truncate_sequences: Truncate sequences with AbNumber.
         """
         start_time = time()
@@ -136,7 +134,6 @@ class IgFoldRunner():
             do_refine=do_refine,
             use_openmm=use_openmm,
             do_renum=do_renum,
-            save_decoys=save_decoys,
             truncate_sequences=truncate_sequences,
         )
 

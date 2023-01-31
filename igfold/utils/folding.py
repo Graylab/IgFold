@@ -158,7 +158,6 @@ def fold(
     do_refine=True,
     use_openmm=False,
     do_renum=True,
-    save_decoys=False,
     truncate_sequences=False,
 ):
     seq_dict = get_sequence_dict(
@@ -196,18 +195,6 @@ def fold(
     with torch.no_grad():
         for i, model in enumerate(models):
             model_out = model(model_in)
-            if save_decoys:
-                decoy_pdb_file = os.path.splitext(
-                    pdb_file)[0] + f".decoy{i}.pdb"
-                process_prediction(
-                    model_out,
-                    decoy_pdb_file,
-                    fasta_file,
-                    do_refine=do_refine,
-                    use_openmm=use_openmm,
-                    do_renum=do_renum,
-                )
-
             model_out = model.gradient_refine(model_in, model_out)
             scores.append(model_out.prmsd.quantile(0.9))
             model_outs.append(model_out)
