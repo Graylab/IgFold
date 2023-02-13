@@ -10,6 +10,7 @@ The code and pre-trained models from this work are made available for non-commer
 
  - Version 0.2.0
    - Add gradient-based refinement to resolve clashes and improve backbone geometry.
+   - Updated predicted structures to reduce occurrence of clashes and cis-peptides.
 
 ## Install
 
@@ -187,10 +188,10 @@ igfold.fold(
 
 To demonstrate the capabilities of IgFold for large-scale prediction of antibody structures, we applied the model to two sets of natural paired antibody sequences. 
 
-The first set contains 104,994 non-redundant paired antibody sequences from the Observed Antibody Space database. These predicted structures are made available for use [online](https://data.graylab.jhu.edu/igfold_oas_paired95.tar.gz).
+The first set contains 104K non-redundant paired antibody sequences from the Observed Antibody Space database. These predicted structures are made available for use [online](https://data.graylab.jhu.edu/OAS_paired.tar.gz).
 
 ```bash
-$ wget https://data.graylab.jhu.edu/igfold_oas_paired95.tar.gz
+$ wget https://data.graylab.jhu.edu/OAS_paired.tar.gz
 ```
 
 The second set contains 1.3M unique paired antibodies from four human donors, collected by [Jaffe et al.](https://www.nature.com/articles/s41586-022-05371-z). These predicted structures are made available for use [online](https://data.graylab.jhu.edu/Jaffe2022.tar.gz).
