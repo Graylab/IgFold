@@ -5,11 +5,12 @@
 import torch
 import torch.nn.functional as F
 from torch import nn, einsum
-from invariant_point_attention.invariant_point_attention import IPABlock, exists
-from pytorch3d.transforms import quaternion_multiply, quaternion_to_matrix
 from einops import rearrange, repeat
 
+from igfold.model.components.IPABlock import IPABlock
 from igfold.utils.coordinates import get_ideal_coords, place_o_coords
+from igfold.utils.general import exists
+from igfold.utils.transforms import quaternion_multiply, quaternion_to_matrix
 
 
 class IPAEncoder(nn.Module):
@@ -64,7 +65,6 @@ class IPATransformer(nn.Module):
 
         self.stop_rotation_grad = stop_rotation_grad
 
-        # using quaternion functions from pytorch3d
         self.quaternion_to_matrix = quaternion_to_matrix
         self.quaternion_multiply = quaternion_multiply
 

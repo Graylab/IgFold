@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from pytorch3d.transforms import quaternion_to_matrix
 
 from igfold.model.interface import *
 from igfold.model.components import TriangleGraphTransformer, IPAEncoder, IPATransformer
 from igfold.utils.coordinates import get_ideal_coords, place_o_coords
+from igfold.utils.transforms import quaternion_to_matrix
 from igfold.training.utils import *
 from igfold.utils.general import exists
 

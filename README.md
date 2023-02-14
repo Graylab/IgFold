@@ -8,6 +8,8 @@ The code and pre-trained models from this work are made available for non-commer
 
 ## Updates
 
+ - Version 0.2.3
+   - Remove dependence on pytorch3d.
  - Version 0.2.0
    - Add gradient-based refinement to resolve clashes and improve backbone geometry.
 
