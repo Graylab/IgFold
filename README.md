@@ -4,12 +4,13 @@ Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04
 
 The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact Johns Hopkins Tech Ventures at `dmalon11@jhu.edu`.
 
-<!-- Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb). -->
+Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb).
 
 ## Updates
 
  - Version 0.2.3
    - Remove dependence on pytorch3d.
+   - Fix Colab notebook.
  - Version 0.2.0
    - Add gradient-based refinement to resolve clashes and improve backbone geometry.
    - Updated predicted structures to reduce occurrence of clashes and cis-peptides.
