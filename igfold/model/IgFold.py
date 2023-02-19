@@ -24,19 +24,13 @@ class IgFold(pl.LightningModule):
     ):
         super().__init__()
 
-        import transformers
-
         self.save_hyperparameters()
         config = self.hparams.config
         if exists(config_overwrite):
             config.update(config_overwrite)
 
-        self.tokenizer = config["tokenizer"]
-        self.vocab_size = len(self.tokenizer.vocab)
-        self.bert_model = transformers.BertModel(config["bert_config"])
-        bert_layers = self.bert_model.config.num_hidden_layers
-        self.bert_feat_dim = self.bert_model.config.hidden_size
-        self.bert_attn_dim = bert_layers * self.bert_model.config.num_attention_heads
+        self.bert_feat_dim = 512
+        self.bert_attn_dim = 64
 
         self.node_dim = config["node_dim"]
 
@@ -117,50 +111,6 @@ class IgFold(pl.LightningModule):
             4,
         )
 
-    def get_tokens(
-        self,
-        seq,
-    ):
-        if isinstance(seq, str):
-            tokens = self.tokenizer.encode(
-                " ".join(list(seq)),
-                return_tensors="pt",
-            )
-        elif isinstance(seq, list) and isinstance(seq[0], str):
-            seqs = [" ".join(list(s)) for s in seq]
-            tokens = self.tokenizer.batch_encode_plus(
-                seqs,
-                return_tensors="pt",
-            )["input_ids"]
-        else:
-            tokens = seq
-
-        return tokens.to(self.device)
-
-    def get_bert_feats(self, tokens):
-        bert_output = self.bert_model(
-            tokens,
-            output_hidden_states=True,
-            output_attentions=True,
-        )
-
-        feats = bert_output.hidden_states[-1]
-        feats = feats[:, 1:-1]
-
-        attn = torch.cat(
-            bert_output.attentions,
-            dim=1,
-        )
-        attn = attn[:, :, 1:-1, 1:-1]
-        attn = rearrange(
-            attn,
-            "b d i j -> b i j d",
-        )
-
-        hidden = bert_output.hidden_states
-
-        return feats, attn, hidden
-
     def get_coords_tran_rot(
         self,
         temp_coords,
@@ -195,15 +145,14 @@ class IgFold(pl.LightningModule):
         self,
         input: IgFoldInput,
     ):
-        tokens = [self.get_tokens(s) for s in input.sequences]
-
+        embeddings = input.embeddings
         temp_coords = input.template_coords
         temp_mask = input.template_mask
         batch_mask = input.batch_mask
         align_mask = input.align_mask
 
-        batch_size = tokens[0].shape[0]
-        seq_lens = [max(t.shape[1] - 2, 0) for t in tokens]
+        batch_size = embeddings[0].shape[0]
+        seq_lens = [max(e.shape[1], 0) for e in embeddings]
         seq_len = sum(seq_lens)
 
         if not exists(temp_coords):
@@ -237,15 +186,10 @@ class IgFold(pl.LightningModule):
         for i, (tc, m) in enumerate(zip(temp_coords, temp_mask)):
             temp_coords[i][m] -= tc[m].mean(-2)
 
-        input.sequences = tokens
         input.template_coords = temp_coords
         input.template_mask = temp_mask
         input.batch_mask = batch_mask
         input.align_mask = align_mask
-
-        batch_size = tokens[0].shape[0]
-        seq_lens = [max(t.shape[1] - 2, 0) for t in tokens]
-        seq_len = sum(seq_lens)
 
         return input, batch_size, seq_lens, seq_len
 
@@ -254,7 +198,8 @@ class IgFold(pl.LightningModule):
         input: IgFoldInput,
     ):
         input, batch_size, seq_lens, seq_len = self.clean_input(input)
-        tokens = input.sequences
+        embeddings = input.embeddings
+        attentions = input.attentions
         temp_coords = input.template_coords
         temp_mask = input.template_mask
         coords_label = input.coords_label
@@ -275,19 +220,20 @@ class IgFold(pl.LightningModule):
 
         ### Model forward pass
 
-        bert_feats, bert_attns, bert_hidden = [], [], []
-        for t in tokens:
-            f, a, h = self.get_bert_feats(t)
-            bert_feats.append(f)
-            bert_attns.append(a)
-            bert_hidden.append(h)
+        # bert_feats, bert_attns = [], []
+        # for t in tokens:
+        #     f, a, h = self.get_bert_feats(t)
+        #     bert_feats.append(f)
+        #     bert_attns.append(a)
+        #     bert_hidden.append(h)
 
-        bert_feats = torch.cat(bert_feats, dim=1)
+        bert_feats = torch.cat(embeddings, dim=1)
         bert_attn = torch.zeros(
             (batch_size, seq_len, seq_len, self.bert_attn_dim),
             device=self.device,
         )
-        for i, (a, l) in enumerate(zip(bert_attns, seq_lens)):
+        for i, (a, l) in enumerate(zip(attentions, seq_lens)):
+            a = rearrange(a, "b n h l1 l2 -> b l1 l2 (n h)")
             cum_l = sum(seq_lens[:i])
             bert_attn[:, cum_l:cum_l + l, cum_l:cum_l + l, :] = a
 
@@ -409,7 +355,6 @@ class IgFold(pl.LightningModule):
         if not exists(coords_label):
             loss = None
 
-        bert_hidden = bert_hidden if return_embeddings else None
         bert_embs = bert_feats if return_embeddings else None
         bert_attn = bert_attn if return_embeddings else None
         gt_embs = gt_embs if return_embeddings else None
@@ -423,7 +368,6 @@ class IgFold(pl.LightningModule):
             bondlen_loss=bondlen_loss,
             prmsd_loss=prmsd_loss,
             loss=loss,
-            bert_hidden=bert_hidden,
             bert_embs=bert_embs,
             bert_attn=bert_attn,
             gt_embs=gt_embs,

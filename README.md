@@ -7,13 +7,18 @@ The code and pre-trained models from this work are made available for non-commer
 Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb).
 
 ## Updates
-
+<font color="red">**Updating to IgFold v0.3.0 is strongly recommended to speed up predictions.**</font>
+```
+ - Version 0.3.0
+   - Reduce runtime by refactoring embedding code
+   - Remove need for external download to access model checkpoints
  - Version 0.2.3
    - Remove dependence on pytorch3d.
    - Fix Colab notebook.
  - Version 0.2.0
    - Add gradient-based refinement to resolve clashes and improve backbone geometry.
    - Updated predicted structures to reduce occurrence of clashes and cis-peptides.
+```
 
 ## Install
 

@@ -5,6 +5,7 @@ from igfold.utils.folding import get_sequence_dict, process_template
 
 
 def embed(
+    antiberty,
     model,
     fasta_file=None,
     sequences=None,
@@ -18,6 +19,13 @@ def embed(
         fasta_file,
     )
 
+    embeddings, attentions = antiberty.embed(
+        seq_dict.values(),
+        return_attention=True,
+    )
+    embeddings = [e[1:-1].unsqueeze(0) for e in embeddings]
+    attentions = [a[:, :, 1:-1, 1:-1].unsqueeze(0) for a in attentions]
+
     temp_coords, temp_mask = process_template(
         template_pdb,
         fasta_file,
@@ -25,7 +33,8 @@ def embed(
         ignore_chain=ignore_chain,
     )
     model_in = IgFoldInput(
-        sequences=seq_dict.values(),
+        embeddings=embeddings,
+        attentions=attentions,
         template_coords=temp_coords,
         template_mask=temp_mask,
         return_embeddings=True,

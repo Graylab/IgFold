@@ -1,3 +1,2 @@
-exclude igfold/trained_models/IgFold/*
-include igfold/resources/vocab.txt
-include igfold/LICENSE.md
+include igfold/trained_models/IgFold/*
+include LICENSE.md

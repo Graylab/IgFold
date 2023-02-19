@@ -1,37 +1,15 @@
 import os
-import urllib
 from time import time
 from glob import glob
 import torch
+
+from antiberty import AntiBERTyRunner
 
 import igfold
 from igfold.model.IgFold import IgFold
 from igfold.utils.folding import fold
 from igfold.utils.embed import embed
 from igfold.utils.general import exists
-
-
-def download_ckpts():
-    """
-    Download checkpoint files if not found.
-    """
-    print("Downloading checkpoint files...")
-
-    tar_file = "IgFold.tar.gz"
-    ckpt_url = f"https://data.graylab.jhu.edu/{tar_file}"
-
-    project_path = os.path.dirname(os.path.realpath(igfold.__file__))
-    ckpt_dir = os.path.join(
-        project_path,
-        "trained_models/",
-    )
-    os.makedirs(ckpt_dir, exist_ok=True)
-
-    ckpt_tar_file = os.path.join(project_path, tar_file)
-
-    urllib.request.urlretrieve(ckpt_url, ckpt_tar_file)
-    os.system(f"tar -xzf {ckpt_tar_file} -C {ckpt_dir}")
-    os.remove(ckpt_tar_file)
 
 
 def display_license():
@@ -73,8 +51,6 @@ class IgFoldRunner():
                     project_path,
                     "trained_models/IgFold/*.ckpt",
                 )
-                if len(glob(ckpt_path)) < num_models:
-                    download_ckpts()
                 model_ckpts = list(glob(ckpt_path))
 
             model_ckpts = list(sorted(model_ckpts))[:num_models]
@@ -92,6 +68,11 @@ class IgFoldRunner():
                 IgFold.load_from_checkpoint(ckpt_file).eval().to(device))
 
         print(f"Successfully loaded {num_models} IgFold models.")
+
+        self.antiberty = AntiBERTyRunner()
+        self.antiberty.model.eval()
+        self.antiberty.model.to(device)
+        print("Loaded AntiBERTy model.")
 
     def fold(
         self,
@@ -123,6 +104,7 @@ class IgFoldRunner():
         """
         start_time = time()
         model_out = fold(
+            self.antiberty,
             self.models,
             pdb_file=pdb_file,
             fasta_file=fasta_file,
@@ -162,6 +144,7 @@ class IgFoldRunner():
 
         start_time = time()
         model_out = embed(
+            self.antiberty,
             self.models[model_idx],
             fasta_file=fasta_file,
             sequences=sequences,

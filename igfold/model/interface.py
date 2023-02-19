@@ -9,7 +9,8 @@ class IgFoldInput():
     Input type of for IgFold model.
     """
 
-    sequences: List[Union[torch.LongTensor, str]]
+    embeddings: List[List[torch.FloatTensor]]
+    attentions: List[List[torch.FloatTensor]]
     template_coords: Optional[torch.FloatTensor] = None
     template_mask: Optional[torch.BoolTensor] = None
     batch_mask: Optional[torch.BoolTensor] = None
@@ -33,7 +34,6 @@ class IgFoldOutput():
     bondlen_loss: Optional[torch.FloatTensor] = None
     prmsd_loss: Optional[torch.FloatTensor] = None
     loss: Optional[torch.FloatTensor] = None
-    bert_hidden: Optional[torch.FloatTensor] = None
     bert_embs: Optional[torch.FloatTensor] = None
     bert_attn: Optional[torch.FloatTensor] = None
     gt_embs: Optional[torch.FloatTensor] = None

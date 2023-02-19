@@ -147,6 +147,7 @@ def process_prediction(
 
 
 def fold(
+    antiberty,
     models,
     pdb_file,
     fasta_file=None,
@@ -178,6 +179,13 @@ def fold(
                     seq,
                 ))
 
+    embeddings, attentions = antiberty.embed(
+        seq_dict.values(),
+        return_attention=True,
+    )
+    embeddings = [e[1:-1].unsqueeze(0) for e in embeddings]
+    attentions = [a[:, :, 1:-1, 1:-1].unsqueeze(0) for a in attentions]
+
     temp_coords, temp_mask = process_template(
         template_pdb,
         fasta_file,
@@ -185,7 +193,8 @@ def fold(
         ignore_chain=ignore_chain,
     )
     model_in = IgFoldInput(
-        sequences=seq_dict.values(),
+        embeddings=embeddings,
+        attentions=attentions,
         template_coords=temp_coords,
         template_mask=temp_mask,
         return_embeddings=True,

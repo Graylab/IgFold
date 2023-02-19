@@ -1,4 +1,4 @@
-antiberty>=0.0.4
+antiberty>=0.1.0
 biopython==1.79
 einops==0.3.0
 future==0.18.2
@@ -7,9 +7,7 @@ numpy==1.21.2
 pytorch-lightning==1.5.10
 requests==2.26.0
 seaborn==0.11.2
-tokenizers==0.11.6
 torch==1.7.1
 tqdm==4.62.1
-transformers==4.18.0
 yapf==0.31.0
 py3Dmol==1.8.0
