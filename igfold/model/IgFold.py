@@ -220,14 +220,7 @@ class IgFold(pl.LightningModule):
 
         ### Model forward pass
 
-        # bert_feats, bert_attns = [], []
-        # for t in tokens:
-        #     f, a, h = self.get_bert_feats(t)
-        #     bert_feats.append(f)
-        #     bert_attns.append(a)
-        #     bert_hidden.append(h)
-
-        bert_feats = torch.cat(embeddings, dim=1)
+        bert_feats = torch.cat(embeddings, dim=1).to(self.device)
         bert_attn = torch.zeros(
             (batch_size, seq_len, seq_len, self.bert_attn_dim),
             device=self.device,
