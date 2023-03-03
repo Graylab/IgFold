@@ -9,6 +9,8 @@ Try antibody structure prediction in [Google Colab](https://colab.research.googl
 ## Updates
 <font color="red">**Updating to IgFold v0.3.0 is strongly recommended to speed up predictions.**</font>
 ```
+ - Version 0.3.1
+   - Fix device issues
  - Version 0.3.0
    - Reduce runtime by refactoring embedding code
    - Remove need for external download to access model checkpoints
@@ -40,7 +42,7 @@ $ pip install IgFold
 Two refinement methods are supported for IgFold predictions. To follow the manuscript, PyRosetta should be installed following the instructions [here](http://pyrosetta.org/downloads). If PyRosetta is not installed, refinement with OpenMM will be attempted. For this option, OpenMM must be installed and configured before running IgFold as follows:
 
 ```bash
-$ conda install -c conda-forge openmm pdbfixer
+$ conda install -c conda-forge openmm==7.7.0 pdbfixer
 ```
 
 ### Renumbering
@@ -60,7 +62,8 @@ _Note_: The first time `IgFoldRunner` is initialized, it will download the pre-t
 Paired antibody sequences can be provided as a dictionary of sequences, where the keys are chain names and the values are the sequences.
 
 ```python
-from igfold import IgFoldRunner, init_pyrosetta
+from igfold import IgFoldRunner
+from igfold.refine.pyrosetta_ref import init_pyrosetta
 
 init_pyrosetta()
 
@@ -82,7 +85,8 @@ igfold.fold(
 To predict a nanobody structure (or an individual heavy or light chain), simply provide one sequence:
 
 ```python
-from igfold import IgFoldRunner, init_pyrosetta
+from igfold import IgFoldRunner
+from igfold.refine.pyrosetta_ref import init_pyrosetta
 
 init_pyrosetta()
 
@@ -124,7 +128,8 @@ igfold.fold(
 RMSD estimates are calculated per-residue and recorded in the B-factor column of the output PDB file. These values are also returned from the `fold` method.
 
 ```python
-from igfold import IgFoldRunner, init_pyrosetta
+from igfold import IgFoldRunner
+from igfold.refine.pyrosetta_ref import init_pyrosetta
 
 init_pyrosetta()
 
@@ -172,9 +177,7 @@ emb.strucutre_embs # Embeddings after template incorporation IPA (dim: 1, L, 64)
 Refinement with OpenMM can be prioritized over PyRosetta by setting `use_openmm=True`.
 
 ```python
-from igfold import IgFoldRunner, init_pyrosetta
-
-init_pyrosetta()
+from igfold import IgFoldRunner
 
 sequences = {
     "H": "EVQLVQSGPEVKKPGTSVKVSCKASGFTFMSSAVQWVRQARGQRLEWIGWIVIGSGNTNYAQKFQERVTITRDMSTSTAYMELSSLRSEDTAVYYCAAPYCSSISCNDGFDIWGQGTMVTVS",

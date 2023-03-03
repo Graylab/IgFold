@@ -131,7 +131,11 @@ def process_prediction(
         refine(*refine_input)
 
     if do_renum:
-        from igfold.utils.abnumber_ import renumber_pdb
+        try:
+            from igfold.utils.abnumber_ import renumber_pdb
+        except:
+            exit("AbNumber not installed. Please install AbNumber to use renumbering.")
+        
         renumber_pdb(
             pdb_file,
             pdb_file,
@@ -167,7 +171,11 @@ def fold(
     )
 
     if truncate_sequences:
-        from igfold.utils.abnumber_ import truncate_seq
+        try:
+            from igfold.utils.abnumber_ import truncate_seq
+        except:
+            exit("AbNumber not installed. Please install AbNumber to use truncation.")
+
         seq_dict = {k: truncate_seq(v) for k, v in seq_dict.items()}
 
     if not exists(fasta_file):
