@@ -55,8 +55,6 @@ $ conda install -c bioconda abnumber
 
 ## Usage
 
-_Note_: The first time `IgFoldRunner` is initialized, it will download the pre-trained weights. This may take a few minutes and will require a network connection.
-
 ### Antibody structure prediction from sequence
 
 Paired antibody sequences can be provided as a dictionary of sequences, where the keys are chain names and the values are the sequences.
