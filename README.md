@@ -167,7 +167,7 @@ emb = igfold.embed(
 
 emb.bert_embs # Embeddings from AntiBERTy final hidden layer (dim: 1, L, 512)
 emb.gt_embs # Embeddings after graph transformer layers (dim: 1, L, 64)
-emb.strucutre_embs # Embeddings after template incorporation IPA (dim: 1, L, 64)
+emb.structure_embs # Embeddings after template incorporation IPA (dim: 1, L, 64)
 ```
 
 ### Extra options
