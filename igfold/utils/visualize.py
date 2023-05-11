@@ -148,7 +148,7 @@ def plot_prmsd(
     seq_dict = get_sequence_dict(sequences, None)
     delims = np.cumsum([len(s) for s in seq_dict.values()]).tolist()
 
-    res_rmsd = prmsd.square().mean(dim=-1).sqrt().squeeze(0)
+    res_rmsd = prmsd.cpu().square().mean(dim=-1).sqrt().squeeze(0)
     chain_res_rmsd = np.split(res_rmsd, delims)
 
     if shade_cdr and exists(pdb_file):
