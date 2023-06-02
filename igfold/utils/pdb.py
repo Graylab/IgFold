@@ -462,6 +462,12 @@ def save_PDB(
                 k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1, error[r])
             k += 1
 
+            if k in delim:
+                pdb_string += "TER  %5d      %3s %s%4d\n" % (
+                    k + 1, AA, chain_id, r + 1)
+                
+    pdb_string += "END\n"
+
     if write_pdb:
         with open(out_pdb, "w") as f:
             f.write(pdb_string)
