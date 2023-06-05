@@ -1,6 +1,6 @@
 # IgFold
 
-Official repository for [IgFold](https://www.biorxiv.org/content/10.1101/2022.04.20.488972): Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies.
+Official repository for [IgFold](https://www.nature.com/articles/s41467-023-38063-x): Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies.
 
 The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact Johns Hopkins Tech Ventures at `dmalon11@jhu.edu`.
 
@@ -216,16 +216,20 @@ If you run into any problems while using IgFold, please create a [Github issue](
 ## Citing this work
 
 ```bibtex
+@article{ruffolo2023fast,
+  title={Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies},
+  author={Ruffolo, Jeffrey A and Chu, Lee-Shin and Mahajan, Sai Pooja and Gray, Jeffrey J},
+  journal={Nature communications},
+  volume={14},
+  number={1},
+  pages={2389},
+  year={2023},
+  publisher={Nature Publishing Group UK London}
+}
 @article{ruffolo2021deciphering,
     title = {Deciphering antibody affinity maturation with language models and weakly supervised learning},
     author = {Ruffolo, Jeffrey A and Gray, Jeffrey J and Sulam, Jeremias},
     journal = {arXiv},
     year= {2021}
-}
-@article{ruffolo2022fast,
-    title = {Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies},
-    author = {Ruffolo, Jeffrey A and Chu, Lee-Shin and Mahajan, Sai Pooja and Gray, Jeffrey J},
-    journal = {bioRxiv},
-    year= {2022}
 }
 ```
