@@ -465,6 +465,7 @@ def save_PDB(
             if k in delim:
                 pdb_string += "TER  %5d      %3s %s%4d\n" % (
                     k + 1, AA, chain_id, r + 1)
+                k += 1
                 
     pdb_string += "END\n"
 
