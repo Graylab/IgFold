@@ -455,17 +455,19 @@ def save_PDB(
     for r, residue in enumerate(coords):
         AA = _aa_1_3_dict[seq[r]]
         for a, atom in enumerate(residue):
+            chain_num = np.where(np.array(delim) - r > 0)[0][0]
+            chain_id = chains[chain_num]
+
             if AA == "GLY" and atoms[a] == "CB": continue
             x, y, z = atom
-            chain_id = chains[np.where(np.array(delim) - r > 0)[0][0]]
-            pdb_string += "ATOM  %5d  %-2s  %3s %s%4d    %8.3f%8.3f%8.3f  %4.2f  %4.2f\n" % (
-                k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1, error[r])
+            pdb_string += "ATOM  %5d  %-2s  %3s %s%4d    %8.3f%8.3f%8.3f  %4.2f  %4.2f           %s  \n" % (
+                k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1, error[r], atoms[a][0])
             k += 1
 
-            if k in delim:
-                pdb_string += "TER  %5d      %3s %s%4d\n" % (
-                    k + 1, AA, chain_id, r + 1)
-                k += 1
+        if r + 1 == delim[chain_num]:
+            pdb_string += "TER   %5d      %3s %s%4d\n" % (
+                k + 1, AA, chain_id, r + 1)
+            k += 1
                 
     pdb_string += "END\n"
 

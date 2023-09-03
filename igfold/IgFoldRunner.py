@@ -17,7 +17,7 @@ def display_license():
     license_message = f"""
     The code, data, and weights for this work are made available for non-commercial use 
     (including at commercial entities) under the terms of the JHU Academic Software License 
-    Agreement. For commercial inquiries, please contact dmalon11[at]jhu.edu.
+    Agreement. For commercial inquiries, please contact awichma2[at]jhu.edu.
     License: {license_url}
     """
     print(license_message)
