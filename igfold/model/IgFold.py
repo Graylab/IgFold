@@ -314,8 +314,8 @@ class IgFold(pl.LightningModule):
             cum_seq_lens = np.cumsum([0] + seq_lens)
             for sl_i, sl in enumerate(seq_lens):
                 align_mask_ = align_mask.clone()
-                align_mask_[:, :cum_seq_lens[sl_i]] = False
-                align_mask_[:, cum_seq_lens[sl_i + 1]:] = False
+                align_mask_[:, :4*cum_seq_lens[sl_i]] = False
+                align_mask_[:, 4*cum_seq_lens[sl_i + 1]:] = False
                 res_batch_mask_ = res_batch_mask.clone()
                 res_batch_mask_[:, :cum_seq_lens[sl_i]] = False
                 res_batch_mask_[:, cum_seq_lens[sl_i + 1]:] = False
