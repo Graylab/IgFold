@@ -2,7 +2,7 @@
 
 Official repository for [IgFold](https://www.nature.com/articles/s41467-023-38063-x): Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies.
 
-The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](LICENSE.md). For commercial inquiries, please contact Johns Hopkins Tech Ventures at `awichma2@jhu.edu`.
+The code and pre-trained models from this work are made available for non-commercial use (including at commercial entities) under the terms of the [JHU Academic Software License Agreement](https://github.com/Graylab/IgFold/blob/main/LICENSE.md). For commercial inquiries, please obtain a license through [Johns Hopkins Technology Ventures](https://jhtv.e-lucid.com/product/antibody-structure-prediction-from-pre-trained-language-model-igfold).
 
 Try antibody structure prediction in [Google Colab](https://colab.research.google.com/github/Graylab/IgFold/blob/main/IgFold.ipynb).
 
