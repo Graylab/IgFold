@@ -2,11 +2,10 @@
 #   Inspired by triangle multiplicative update implementation from https://github.com/lucidrains/triangle-multiplicative-module
 ###
 
-from torch import nn, einsum
-import torch.nn.functional as F
 from einops import rearrange
+from torch import einsum, nn
 
-from igfold.utils.general import exists, default
+from igfold.utils.general import default, exists
 
 
 class TriangleMultiplicativeModule(nn.Module):
@@ -15,11 +14,10 @@ class TriangleMultiplicativeModule(nn.Module):
         *,
         dim,
         hidden_dim=None,
-        mix='ingoing',
+        mix="ingoing",
     ):
         super().__init__()
-        assert mix in {'ingoing',
-                       'outgoing'}, 'mix must be either ingoing or outgoing'
+        assert mix in {"ingoing", "outgoing"}, "mix must be either ingoing or outgoing"
 
         hidden_dim = default(
             hidden_dim,
@@ -49,23 +47,23 @@ class TriangleMultiplicativeModule(nn.Module):
         # initialize all gating to be identity
 
         for gate in (
-                self.left_gate,
-                self.right_gate,
-                self.out_gate,
+            self.left_gate,
+            self.right_gate,
+            self.out_gate,
         ):
             nn.init.constant_(
                 gate.weight,
-                0.,
+                0.0,
             )
             nn.init.constant_(
                 gate.bias,
-                1.,
+                1.0,
             )
 
-        if mix == 'outgoing':
-            self.mix_einsum_eq = '... i k d, ... j k d -> ... i j d'
-        elif mix == 'ingoing':
-            self.mix_einsum_eq = '... k j d, ... k i d -> ... i j d'
+        if mix == "outgoing":
+            self.mix_einsum_eq = "... i k d, ... j k d -> ... i j d"
+        elif mix == "ingoing":
+            self.mix_einsum_eq = "... k j d, ... k i d -> ... i j d"
 
         self.to_out_norm = nn.LayerNorm(hidden_dim)
         self.to_out = nn.Linear(
@@ -74,11 +72,11 @@ class TriangleMultiplicativeModule(nn.Module):
         )
 
     def forward(self, x, mask=None):
-        assert x.shape[1] == x.shape[2], 'feature map must be symmetrical'
+        assert x.shape[1] == x.shape[2], "feature map must be symmetrical"
         if exists(mask):
             mask = rearrange(
                 mask,
-                'b i j -> b i j ()',
+                "b i j -> b i j ()",
             )
 
         x = self.norm(x)

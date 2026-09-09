@@ -3,10 +3,10 @@
 ###
 
 import torch
-from torch import nn, einsum
 from einops import rearrange, repeat
+from torch import einsum, nn
 
-from igfold.utils.general import exists, default
+from igfold.utils.general import default, exists
 
 List = nn.ModuleList
 
@@ -122,7 +122,7 @@ class Attention(nn.Module):
         q, k, v, e_kv = map(
             lambda t: rearrange(
                 t,
-                'b ... (h d) -> (b h) ... d',
+                "b ... (h d) -> (b h) ... d",
                 h=h,
             ),
             (q, k, v, e_kv),
@@ -133,26 +133,29 @@ class Attention(nn.Module):
         k, v = map(
             lambda t: rearrange(
                 t,
-                'b j d -> b () j d ',
+                "b j d -> b () j d ",
             ),
             (k, v),
         )
         k = k + ek
         v = v + ev
 
-        sim = einsum(
-            'b i d, b i j d -> b i j',
-            q,
-            k,
-        ) * self.scale
+        sim = (
+            einsum(
+                "b i d, b i j d -> b i j",
+                q,
+                k,
+            )
+            * self.scale
+        )
 
         if exists(mask):
             mask = rearrange(
                 mask,
-                'b i -> b i ()',
+                "b i -> b i ()",
             ) & rearrange(
                 mask,
-                'b j -> b () j',
+                "b j -> b () j",
             )
             mask = repeat(
                 mask,
@@ -164,13 +167,13 @@ class Attention(nn.Module):
 
         attn = sim.softmax(dim=-1)
         out = einsum(
-            'b i j, b i j d -> b i d',
+            "b i j, b i j d -> b i d",
             attn,
             v,
         )
         out = rearrange(
             out,
-            '(b h) n d -> b n (h d)',
+            "(b h) n d -> b n (h d)",
             h=h,
         )
         return self.to_out(out)
@@ -201,30 +204,40 @@ class GraphTransformer(nn.Module):
             edge_dim,
             dim,
         )
-        self.norm_edges = nn.LayerNorm(
-            edge_dim) if norm_edges else nn.Identity()
+        self.norm_edges = nn.LayerNorm(edge_dim) if norm_edges else nn.Identity()
 
         for _ in range(depth):
             self.layers.append(
-                List([
-                    List([
-                        PreNorm(
-                            dim,
-                            Attention(
-                                dim,
-                                edge_dim=edge_dim,
-                                dim_head=dim_head,
-                                heads=heads,
-                            )),
-                        GatedResidual(dim)
-                    ]),
-                    List(
-                        [PreNorm(
-                            dim,
-                            FeedForward(dim),
+                List(
+                    [
+                        List(
+                            [
+                                PreNorm(
+                                    dim,
+                                    Attention(
+                                        dim,
+                                        edge_dim=edge_dim,
+                                        dim_head=dim_head,
+                                        heads=heads,
+                                    ),
+                                ),
+                                GatedResidual(dim),
+                            ]
                         ),
-                         GatedResidual(dim)]) if with_feedforwards else None
-                ]))
+                        List(
+                            [
+                                PreNorm(
+                                    dim,
+                                    FeedForward(dim),
+                                ),
+                                GatedResidual(dim),
+                            ]
+                        )
+                        if with_feedforwards
+                        else None,
+                    ]
+                )
+            )
 
     def forward(
         self,

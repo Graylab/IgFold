@@ -21,7 +21,7 @@ def normed_cross(vec1, vec2, eps=EPS):
 
 
 def dist(x_1, x_2, eps=EPS):
-    d_sq = (x_1 - x_2)**2
+    d_sq = (x_1 - x_2) ** 2
     d = torch.sqrt(d_sq.sum(-1) + eps)
 
     return d

@@ -4,8 +4,8 @@
 
 import torch
 import torch.nn.functional as F
-from torch import nn, einsum
 from einops import rearrange, repeat
+from torch import einsum, nn
 
 from igfold.model.components.IPABlock import IPABlock
 from igfold.utils.coordinates import get_ideal_coords, place_o_coords
@@ -26,10 +26,12 @@ class IPAEncoder(nn.Module):
         # layers
         self.layers = nn.ModuleList([])
         for _ in range(depth):
-            self.layers.append(IPABlock(
-                dim=dim,
-                **kwargs,
-            ))
+            self.layers.append(
+                IPABlock(
+                    dim=dim,
+                    **kwargs,
+                )
+            )
 
     def forward(
         self,
@@ -39,6 +41,7 @@ class IPAEncoder(nn.Module):
         rotations=None,
         pairwise_repr=None,
         mask=None,
+        key_padding_mask=None,
     ):
         for block in self.layers:
             x = block(
@@ -47,6 +50,7 @@ class IPAEncoder(nn.Module):
                 rotations=rotations,
                 translations=translations,
                 mask=mask,
+                key_padding_mask=key_padding_mask,
             )
 
         return x
@@ -88,20 +92,26 @@ class IPATransformer(nn.Module):
         quaternions=None,
         pairwise_repr=None,
         mask=None,
+        key_padding_mask=None,
     ):
-        x, device, quaternion_multiply, quaternion_to_matrix = single_repr, single_repr.device, self.quaternion_multiply, self.quaternion_to_matrix
+        x, device, quaternion_multiply, quaternion_to_matrix = (
+            single_repr,
+            single_repr.device,
+            self.quaternion_multiply,
+            self.quaternion_to_matrix,
+        )
         b, n, *_ = x.shape
 
         # if no initial quaternions passed in, start from identity
 
         if not exists(quaternions):
             quaternions = torch.tensor(
-                [1., 0., 0., 0.],
+                [1.0, 0.0, 0.0, 0.0],
                 device=device,
             )  # initial rotations
             quaternions = repeat(
                 quaternions,
-                'd -> b n d',
+                "d -> b n d",
                 b=b,
                 n=n,
             )
@@ -127,6 +137,7 @@ class IPATransformer(nn.Module):
                 rotations=rotations,
                 translations=translations,
                 mask=mask,
+                key_padding_mask=key_padding_mask,
             )
 
             # update quaternion and translation
@@ -138,7 +149,7 @@ class IPATransformer(nn.Module):
             quaternion_update = F.pad(
                 quaternion_update,
                 (1, 0),
-                value=1.,
+                value=1.0,
             )
 
             quaternions = quaternion_multiply(
@@ -146,7 +157,7 @@ class IPATransformer(nn.Module):
                 quaternion_update,
             )
             translations = translations + einsum(
-                'b n c, b n c r -> b n r',
+                "b n c, b n c r -> b n r",
                 translation_update,
                 rotations,
             )
@@ -161,7 +172,7 @@ class IPATransformer(nn.Module):
 
         rotations = quaternion_to_matrix(quaternions)
         points_global = einsum(
-            'b n a c, b n c d -> b n a d',
+            "b n a c, b n c d -> b n a d",
             ideal_coords,
             rotations,
         ) + rearrange(

@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Optional
+
 import torch
 
 
 @dataclass
-class IgFoldInput():
+class IgFoldInput:
     """
     Input type of for IgFold model.
     """
@@ -20,7 +21,7 @@ class IgFoldInput():
 
 
 @dataclass
-class IgFoldOutput():
+class IgFoldOutput:
     """
     Output type of for IgFold model.
     """

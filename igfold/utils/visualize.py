@@ -1,9 +1,7 @@
 import math
-import torch
+
 import numpy as np
-import py3Dmol
-import matplotlib.pyplot as plt
-import seaborn as sns
+import torch
 
 from igfold.utils.folding import get_sequence_dict
 from igfold.utils.general import exists
@@ -11,12 +9,12 @@ from igfold.utils.pdb import get_cdr_range_dict
 
 
 def show_pdb(
-        pdb_filename: str,
-        num_sequences,
-        bb_sticks=False,
-        sc_sticks=False,
-        color="b",
-        view_size=(500, 500),
+    pdb_filename: str,
+    num_sequences,
+    bb_sticks=False,
+    sc_sticks=False,
+    color="b",
+    view_size=(500, 500),
 ):
     return show_pdbs(
         [pdb_filename],
@@ -34,13 +32,15 @@ def show_pdb(
 
 
 def show_pdbs(
-        pdb_filenames,
-        num_sequences,
-        bb_sticks=False,
-        sc_sticks=False,
-        color="b",
-        view_size=(800, 800),
+    pdb_filenames,
+    num_sequences,
+    bb_sticks=False,
+    sc_sticks=False,
+    color="b",
+    view_size=(800, 800),
 ):
+    import py3Dmol  # optional dependency (pip install igfold[viz])
+
     grid_width = math.ceil(math.sqrt(len(pdb_filenames)))
     grid_height = math.ceil(len(pdb_filenames) / grid_width)
     view = py3Dmol.view(
@@ -52,86 +52,51 @@ def show_pdbs(
 
     for pdb_i, pdb_filename in enumerate(pdb_filenames):
         grid_row, grid_col = pdb_i // grid_width, pdb_i % grid_width
-        view.addModel(
-            open(pdb_filename, "r").read(),
-            "pdb",
-            viewer=(grid_row, grid_col),
-        )
+        fmt = "cif" if pdb_filename.lower().endswith((".cif", ".mmcif")) else "pdb"
+        with open(pdb_filename) as f:
+            view.addModel(f.read(), fmt, viewer=(grid_row, grid_col))
 
     if color == "b":
-        view.setStyle({
-            "cartoon": {
-                "colorscheme": {
-                    "prop": "b",
-                    "gradient": "roygb",
-                    "min": 1.5,
-                    "max": 0.5,
+        view.setStyle(
+            {
+                "cartoon": {
+                    "colorscheme": {
+                        "prop": "b",
+                        "gradient": "roygb",
+                        "min": 1.5,
+                        "max": 0.5,
+                    }
                 }
             }
-        })
+        )
     elif color == "rainbow":
         view.setStyle({"cartoon": {"color": "spectrum"}})
     elif color == "chain":
-        for n, chain, color_ in zip(
-                range(num_sequences),
-                list("ABCDEFGH"),
-            [
-                "lime", "cyan", "magenta", "yellow", "salmon", "white", "blue",
-                "orange"
-            ],
-        ):
-            view.setStyle({"chain": chain}, {"cartoon": {"color": color_}})
+        view.setStyle({"cartoon": {"colorscheme": "chain"}})
     if sc_sticks:
         BB = ["C", "O", "N"]
         view.addStyle(
             {
                 "and": [
-                    {
-                        "resn": ["GLY", "PRO"],
-                        "invert": True
-                    },
-                    {
-                        "atom": BB,
-                        "invert": True
-                    },
+                    {"resn": ["GLY", "PRO"], "invert": True},
+                    {"atom": BB, "invert": True},
                 ]
             },
-            {"stick": {
-                "colorscheme": f"WhiteCarbon",
-                "radius": 0.2
-            }},
+            {"stick": {"colorscheme": "WhiteCarbon", "radius": 0.2}},
         )
         view.addStyle(
-            {"and": [{
-                "resn": "GLY"
-            }, {
-                "atom": "CA"
-            }]},
-            {"sphere": {
-                "colorscheme": f"WhiteCarbon",
-                "radius": 0.3
-            }},
+            {"and": [{"resn": "GLY"}, {"atom": "CA"}]},
+            {"sphere": {"colorscheme": "WhiteCarbon", "radius": 0.3}},
         )
         view.addStyle(
-            {"and": [{
-                "resn": "PRO"
-            }, {
-                "atom": ["C", "O"],
-                "invert": True
-            }]},
-            {"stick": {
-                "colorscheme": f"WhiteCarbon",
-                "radius": 0.3
-            }},
+            {"and": [{"resn": "PRO"}, {"atom": ["C", "O"], "invert": True}]},
+            {"stick": {"colorscheme": "WhiteCarbon", "radius": 0.3}},
         )
     if bb_sticks:
         BB = ["C", "O", "N", "CA"]
         view.addStyle(
             {"atom": BB},
-            {"stick": {
-                "colorscheme": f"WhiteCarbon",
-                "radius": 0.3
-            }},
+            {"stick": {"colorscheme": "WhiteCarbon", "radius": 0.3}},
         )
 
     view.zoomTo()
@@ -145,10 +110,13 @@ def plot_prmsd(
     shade_cdr=False,
     pdb_file=None,
 ):
+    import matplotlib.pyplot as plt  # optional dependencies (pip install igfold[viz])
+    import seaborn as sns
+
     seq_dict = get_sequence_dict(sequences, None)
     delims = np.cumsum([len(s) for s in seq_dict.values()]).tolist()
 
-    res_rmsd = prmsd.cpu().square().mean(dim=-1).sqrt().squeeze(0)
+    res_rmsd = prmsd.detach().cpu().square().mean(dim=-1).sqrt().squeeze(0).numpy()
     chain_res_rmsd = np.split(res_rmsd, delims)
 
     if shade_cdr and exists(pdb_file):

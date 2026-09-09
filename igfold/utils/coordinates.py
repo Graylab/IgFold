@@ -15,14 +15,14 @@ def place_fourth_atom(
     bc_vec = b_coord - c_coord
     bc_vec = bc_vec / bc_vec.norm(dim=-1, keepdim=True)
 
-    n_vec = (b_coord - a_coord).expand(bc_vec.shape).cross(bc_vec)
+    n_vec = torch.cross((b_coord - a_coord).expand(bc_vec.shape), bc_vec, dim=-1)
     n_vec = n_vec / n_vec.norm(dim=-1, keepdim=True)
 
-    m_vec = [bc_vec, n_vec.cross(bc_vec), n_vec]
+    m_vec = [bc_vec, torch.cross(n_vec, bc_vec, dim=-1), n_vec]
     d_vec = [
         length * torch.cos(planar),
         length * torch.sin(planar) * torch.cos(dihedral),
-        -length * torch.sin(planar) * torch.sin(dihedral)
+        -length * torch.sin(planar) * torch.sin(dihedral),
     ]
 
     d_coord = c_coord + sum([m * d for m, d in zip(m_vec, d_vec)])
@@ -54,7 +54,18 @@ def get_ideal_coords(center=False):
     return coords
 
 
-def place_o_coords(coords):
+# psi of an extended beta strand, the typical conformation at antibody chain termini
+TERMINAL_O_DIHEDRAL = -0.873  # N-CA-C-O dihedral (radians) = psi(130 deg) + 180 deg
+
+
+def place_o_coords(coords, seq_lens=None):
+    """
+    Add backbone O atoms to (b, L, 4, 3) N/CA/C/CB coordinates, giving (b, L, 5, 3).
+
+    Interior O atoms are placed trans to the next residue's N. The last residue of each chain
+    (chain ends given by ``seq_lens``; the final residue otherwise) has no next N, so its O is
+    placed from its own N-CA-C frame with a beta-strand psi.
+    """
     N = coords[:, :, 0]
     A = coords[:, :, 1]
     C = coords[:, :, 2]
@@ -66,10 +77,24 @@ def place_o_coords(coords):
         torch.tensor(1.231),
         torch.tensor(2.108),
         torch.tensor(-3.142),
-    ).unsqueeze(2)
+    )
+    terminal_o_coords = place_fourth_atom(
+        N,
+        A,
+        C,
+        torch.tensor(1.231),
+        torch.tensor(2.108),
+        torch.tensor(TERMINAL_O_DIHEDRAL),
+    )
+
+    if seq_lens is None:
+        terminal_idx = [coords.shape[1] - 1]
+    else:
+        terminal_idx = [int(i) - 1 for i in torch.cumsum(torch.as_tensor(seq_lens), 0)]
+    o_coords[:, terminal_idx] = terminal_o_coords[:, terminal_idx]
 
     coords = torch.cat(
-        [coords, o_coords],
+        [coords, o_coords.unsqueeze(2)],
         dim=2,
     )
 
