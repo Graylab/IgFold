@@ -132,6 +132,11 @@ dmypy.json
 .DS_Store
 .vscode/
 trained_models/
+!igfold/trained_models/
+!igfold/trained_models/IgFold/
+igfold/trained_models/IgFold/*
+!igfold/trained_models/IgFold/*.safetensors
+!igfold/trained_models/IgFold/LICENSE.md
 demo_data/
 scripts/# pixi
 .pixi/

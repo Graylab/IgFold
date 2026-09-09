@@ -1,4 +1,4 @@
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from .model.IgFold import IgFold
 from .model.interface import IgFoldInput, IgFoldOutput
