@@ -1,0 +1,34 @@
+name: Publish to PyPI
+
+# Builds the sdist and wheel and uploads them with PyPI trusted publishing (no API token needed).
+# One-time setup on pypi.org: project -> Publishing -> add a GitHub publisher for this repository,
+# workflow file `publish.yml`, environment `pypi`.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

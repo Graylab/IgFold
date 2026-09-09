@@ -1,3 +1,90 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "igfold"
+version = "1.0.0"
+description = "Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies"
+readme = "README.md"
+license-files = ["LICENSE.md"]
+requires-python = ">=3.11"
+authors = [{ name = "Jeffrey Ruffolo" }]
+dependencies = [
+  "antiberty>=1.0.0",
+  "biopython>=1.79",
+  "einops>=0.3.0",
+  "numpy",
+  "safetensors",
+  "torch>=2.0",
+]
+
+[project.scripts]
+igfold = "igfold.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Graylab/IgFold"
+Paper = "https://www.nature.com/articles/s41467-023-38063-x"
+
+[project.optional-dependencies]
+refine = ["openmm>=8.2", "pdbfixer>=1.10"]
+renum = ["anarcii>=2.0"]
+viz = ["py3Dmol", "matplotlib", "seaborn"]
+dev = ["pytest", "pytest-xdist", "pre-commit", "ruff"]
+
+[tool.setuptools.packages.find]
+include = ["igfold*"]
+
+[tool.setuptools.package-data]
+igfold = ["trained_models/IgFold/*.safetensors", "trained_models/IgFold/LICENSE.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["IgFold.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501", "E741"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["igfold"]
+
+# ---------------------------------------------------------------------------
+# pixi: locked environments for prediction, refinement and renumbering.
+#
+#   pixi install                 -> core prediction env (no refinement/renumbering)
+#   pixi install -e full         -> + OpenMM refinement + ANARCII renumbering
+#   pixi run -e full python ...  -> run inside that env
+# ---------------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.system-requirements]
+macos = "14.0"  # required by current PyTorch wheels
+
+# All Python dependencies come from PyPI; conda provides only the interpreter.
+[tool.pixi.dependencies]
+python = ">=3.11,<3.13"
+
+[tool.pixi.pypi-dependencies]
+igfold = { path = ".", editable = true }
+
+[tool.pixi.feature.dev.dependencies]
+pip = "*"
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+full = { features = ["refine", "renum", "viz"], solve-group = "default" }
+dev = { features = ["refine", "renum", "viz", "dev"], solve-group = "default" }
+
+[tool.pixi.tasks]
+fold = "igfold fold"
+test = "pytest"
+
+[tool.pixi.feature.dev.tasks]
+lint = "pre-commit run --all-files"

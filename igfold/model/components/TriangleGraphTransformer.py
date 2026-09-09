@@ -1,8 +1,9 @@
 from torch import nn
 
+from igfold.utils.general import exists
+
 from .GraphTransformer import GraphTransformer
 from .TriangleMultiplicativeModule import TriangleMultiplicativeModule
-from igfold.utils.general import exists
 
 
 class TriangleGraphTransformer(nn.Module):
@@ -31,16 +32,15 @@ class TriangleGraphTransformer(nn.Module):
             triangle_out = TriangleMultiplicativeModule(
                 dim=edge_dim,
                 hidden_dim=tri_dim_hidden,
-                mix='outgoing',
+                mix="outgoing",
             )
             triangle_in = TriangleMultiplicativeModule(
                 dim=edge_dim,
                 hidden_dim=tri_dim_hidden,
-                mix='ingoing',
+                mix="ingoing",
             )
 
-            self.layers.append(
-                nn.ModuleList([graph_transformer, triangle_out, triangle_in]))
+            self.layers.append(nn.ModuleList([graph_transformer, triangle_out, triangle_in]))
 
     def forward(self, nodes, edges, mask=None):
         for gt, tri_out, tri_in in self.layers:

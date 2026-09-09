@@ -1,120 +1,35 @@
-import time
-import sys
-import io
-from typing import Union, List
-import requests
 import warnings
-from os.path import splitext, basename
-from Bio import PDB
-from Bio.PDB import PDBParser, PDBIO
-from Bio.SeqUtils import seq1
-from Bio import SeqIO
 from bisect import bisect_left, bisect_right
-import torch
+from os.path import basename, splitext
+from typing import Dict, List, Optional, Tuple, Union
+
 import numpy as np
+import torch
+from Bio.Align import PairwiseAligner
+from Bio.PDB import PDBIO, PDBParser
+from Bio.SeqUtils import seq1
 
 from igfold.utils.coordinates import place_fourth_atom
-from igfold.utils.fasta import get_fasta_chain_seq
 from igfold.utils.general import _aa_1_3_dict, exists
 
+# Chothia CDR definitions (inclusive residue-number ranges)
+CDR_CHOTHIA_RANGES = {
+    "h1": (26, 32),
+    "h2": (52, 56),
+    "h3": (95, 102),
+    "l1": (24, 34),
+    "l2": (50, 56),
+    "l3": (89, 97),
+}
 
-def renumber_pdb(old_pdb, renum_pdb=None):
-    if not exists(renum_pdb):
-        renum_pdb = old_pdb
-
-    success = False
-    time.sleep(5)
-    for i in range(10):
-        try:
-            with open(old_pdb, 'rb') as f:
-                response = requests.post(
-                    'http://www.bioinf.org.uk/abs/abnum/abnumpdb.cgi',
-                    params={
-                        "plain": "1",
-                        "output": "-HL",
-                        "scheme": "-c"
-                    },
-                    files={"pdb": f},
-                )
-
-            success = response.status_code == 200 and not ("<html>"
-                                                           in response.text)
-
-            if success:
-                break
-            else:
-                time.sleep((i + 1) * 5)
-        except requests.exceptions.ConnectionError:
-            time.sleep(60)
-
-    # if success:
-    if success:
-        new_pdb_data = response.text
-        with open(renum_pdb, "w") as f:
-            f.write(new_pdb_data)
-    else:
-        print(
-            "Failed to renumber PDB. This is likely due to a connection error or a timeout with the AbNum server."
-        )
+# Alternative template chain ids accepted for the heavy / light chain
+LEGACY_TEMPLATE_CHAIN_MAP = {"A": "H", "B": "L"}
 
 
-def count_pdb_chains(pdb_file):
-    parser = PDBParser()
-    with warnings.catch_warnings(record=True):
-        structure = parser.get_structure("_", pdb_file)
-
-    l = len(list(structure.get_chains()))
-
-    return l
-
-
-def reorder_pdb_chains(pdb_file, chain_order):
-    """Reorder the chains in a PDB file and update residue numbers"""
-
-    parser = PDBParser()
-    with warnings.catch_warnings(record=True):
-        structure = parser.get_structure("_", pdb_file)
-
-    chains = list(structure.get_chains())
-    if len(chains) != len(chain_order):
-        raise ValueError(
-            f"Number of chains in PDB file ({len(chains)}) does not match number of chains in chain order ({len(chain_order)})"
-        )
-
-    chain_order = [c.upper() for c in chain_order]
-    sorted_chains = sorted(chains, key=lambda c: chain_order.index(c.id))
-
-    new_structure = PDB.Structure.Structure("_")
-    new_model = PDB.Model.Model(0)
-    new_structure.add(new_model)
-    atom_num = 1
-    for chain in sorted_chains:
-        new_chain = PDB.Chain.Chain(chain.id)
-        new_model.add(new_chain)
-        for residue in chain.get_residues():
-            new_residue = PDB.Residue.Residue(
-                residue.id,
-                residue.resname,
-                residue.segid,
-            )
-            new_chain.add(new_residue)
-            for atom in residue:
-                new_atom = PDB.Atom.Atom(
-                    atom.name,
-                    atom.coord,
-                    atom.occupancy,
-                    atom.bfactor,
-                    atom.altloc,
-                    atom.fullname,
-                    atom_num,
-                    atom.element,
-                )
-                new_residue.add(new_atom)
-                atom_num += 1
-
-    io = PDBIO()
-    io.set_structure(new_structure)
-    io.save(pdb_file)
+def _parse_structure(pdb_file):
+    """First model of a PDB file as a Bio.PDB Model."""
+    parser = PDBParser(QUIET=True)
+    return parser.get_structure(splitext(basename(pdb_file))[0], pdb_file)[0]
 
 
 def get_atom_coord(residue, atom_type):
@@ -128,187 +43,202 @@ def get_cb_or_ca_coord(residue):
     if not exists(residue):
         return [0, 0, 0]
 
-    if 'CB' in residue:
-        return residue['CB'].get_coord()
-    elif 'CA' in residue:
-        return residue['CA'].get_coord()
+    if "CB" in residue:
+        return residue["CB"].get_coord()
+    elif "CA" in residue:
+        return residue["CA"].get_coord()
     else:
         return [0, 0, 0]
 
 
-def get_continuous_ranges(residues):
-    """ Returns ranges of residues which are continuously connected (peptide bond length 1.2-1.45 Å) """
-    dists = []
-    for res_i in range(len(residues) - 1):
-        dists.append(
-            np.linalg.norm(
-                np.array(get_atom_coord(residues[res_i], "C")) -
-                np.array(get_atom_coord(residues[res_i + 1], "N"))))
-
-    ranges = []
-    start_i = 0
-    for d_i, d in enumerate(dists):
-        if d > 1.45 or d < 1.2:
-            ranges.append((start_i, d_i + 1))
-            start_i = d_i + 1
-        if d_i == len(dists) - 1:
-            ranges.append((start_i, None))
-
-    return ranges
+def get_atom_coords_mask(coords):
+    mask = torch.tensor([1 if sum(_) != 0 else 0 for _ in coords], dtype=torch.uint8)
+    mask = mask & (1 - torch.any(torch.isnan(coords), dim=1).to(torch.uint8))
+    return mask
 
 
 def place_missing_cb_o(atom_coords):
     cb_coords = place_fourth_atom(
-        atom_coords['C'],
-        atom_coords['N'],
-        atom_coords['CA'],
+        atom_coords["C"],
+        atom_coords["N"],
+        atom_coords["CA"],
         torch.tensor(1.522),
         torch.tensor(1.927),
         torch.tensor(-2.143),
     )
     o_coords = place_fourth_atom(
-        torch.roll(atom_coords['N'], shifts=-1, dims=0),
-        atom_coords['CA'],
-        atom_coords['C'],
+        torch.roll(atom_coords["N"], shifts=-1, dims=0),
+        atom_coords["CA"],
+        atom_coords["C"],
         torch.tensor(1.231),
         torch.tensor(2.108),
         torch.tensor(-3.142),
     )
 
-    bb_mask = get_atom_coords_mask(atom_coords['N']) & get_atom_coords_mask(
-        atom_coords['CA']) & get_atom_coords_mask(atom_coords['C'])
-    missing_cb = (get_atom_coords_mask(atom_coords['CB']) & bb_mask) == 0
-    atom_coords['CB'][missing_cb] = cb_coords[missing_cb]
-
-    bb_mask = get_atom_coords_mask(
-        torch.roll(
-            atom_coords['N'],
-            shifts=-1,
-            dims=0,
-        )) & get_atom_coords_mask(atom_coords['CA']) & get_atom_coords_mask(
-            atom_coords['C'])
-    missing_o = (get_atom_coords_mask(atom_coords['O']) & bb_mask) == 0
-    atom_coords['O'][missing_o] = o_coords[missing_o]
-
-
-def get_atom_coords(pdb_file, fasta_file=None):
-    p = PDBParser()
-    file_name = splitext(basename(pdb_file))[0]
-    structure = p.get_structure(
-        file_name,
-        pdb_file,
+    bb_mask = (
+        get_atom_coords_mask(atom_coords["N"])
+        & get_atom_coords_mask(atom_coords["CA"])
+        & get_atom_coords_mask(atom_coords["C"])
     )
+    missing_cb = (get_atom_coords_mask(atom_coords["CB"]) & bb_mask) == 0
+    atom_coords["CB"][missing_cb] = cb_coords[missing_cb]
 
-    if fasta_file:
-        residues = []
-        for chain in structure.get_chains():
-            pdb_seq = get_pdb_chain_seq(
-                pdb_file,
-                chain.id,
+    bb_mask = (
+        get_atom_coords_mask(
+            torch.roll(
+                atom_coords["N"],
+                shifts=-1,
+                dims=0,
             )
+        )
+        & get_atom_coords_mask(atom_coords["CA"])
+        & get_atom_coords_mask(atom_coords["C"])
+    )
+    missing_o = (get_atom_coords_mask(atom_coords["O"]) & bb_mask) == 0
+    atom_coords["O"][missing_o] = o_coords[missing_o]
 
-            chain_dict = {"A": "H", "B": "L", "H": "H", "L": "L"}
-            fasta_seq = get_fasta_chain_seq(
-                fasta_file,
-                chain_dict[chain.id],
-            )
 
-            chain_residues = list(chain.get_residues())
-            continuous_ranges = get_continuous_ranges(chain_residues)
+def align_residues_to_sequence(
+    residues: List,
+    target_seq: str,
+) -> Tuple[List, float]:
+    """
+    Map the residues of a PDB chain onto positions of ``target_seq`` by global sequence
+    alignment. Mismatches (e.g. point mutations) are tolerated; unaligned positions are None.
 
-            fasta_residues = [None for _ in range(len(fasta_seq))]
-            fasta_r = (0, 0)
-            for pdb_r in continuous_ranges:
-                fasta_r_start = fasta_seq[fasta_r[1]:].index(
-                    pdb_seq[pdb_r[0]:pdb_r[1]]) + fasta_r[1]
-                fasta_r_end = (len(pdb_seq) if pdb_r[1] == None else
-                               pdb_r[1]) - pdb_r[0] + fasta_r_start
-                fasta_r = (fasta_r_start, fasta_r_end)
-                fasta_residues[fasta_r[0]:fasta_r[1]] = chain_residues[
-                    pdb_r[0]:pdb_r[1]]
+    :return: list of length ``len(target_seq)`` with a Bio.PDB residue or None per position,
+        and the fraction of aligned target positions that are identical.
+    """
+    pdb_seq = "".join(seq1(r.get_resname()) for r in residues)
 
-            residues += fasta_residues
+    aligner = PairwiseAligner()
+    aligner.mode = "global"
+    aligner.match_score = 2
+    aligner.mismatch_score = -1
+    aligner.open_gap_score = -3
+    aligner.extend_gap_score = -0.5
+    # Missing termini in the template are common and should be cheap
+    try:  # Biopython >= 1.86 naming
+        aligner.end_insertion_score = 0
+        aligner.end_deletion_score = 0
+    except AttributeError:
+        aligner.target_end_gap_score = 0
+        aligner.query_end_gap_score = 0
+
+    alignment = aligner.align(target_seq, pdb_seq)[0]
+
+    mapped = [None for _ in target_seq]
+    n_aligned, n_identical = 0, 0
+    for (t_start, t_end), (q_start, q_end) in zip(*alignment.aligned):
+        for i in range(t_end - t_start):
+            mapped[t_start + i] = residues[q_start + i]
+            n_aligned += 1
+            n_identical += target_seq[t_start + i] == pdb_seq[q_start + i]
+
+    identity = n_identical / n_aligned if n_aligned > 0 else 0.0
+
+    return mapped, identity
+
+
+def match_template_chains(
+    template_chain_ids: List[str],
+    seq_dict: Dict[str, str],
+) -> Dict[str, str]:
+    """
+    Decide which template chain provides coordinates for each sequence key.
+    Matches identical ids first, then the legacy A->H / B->L convention, and finally
+    pairs a single template chain with a single sequence.
+    """
+    unused = list(template_chain_ids)
+    mapping = {}
+    for key in seq_dict:
+        if key in unused:
+            mapping[key] = key
+            unused.remove(key)
+    for tid in list(unused):
+        key = LEGACY_TEMPLATE_CHAIN_MAP.get(tid)
+        if exists(key) and key in seq_dict and key not in mapping:
+            mapping[key] = tid
+            unused.remove(tid)
+    if len(mapping) == 0 and len(unused) == 1 and len(seq_dict) == 1:
+        mapping[next(iter(seq_dict))] = unused[0]
+
+    if len(mapping) == 0:
+        raise ValueError(
+            f"Could not match template chains {template_chain_ids} to sequence chains {list(seq_dict)}. "
+            "Name the template chains to match the sequence dictionary keys (e.g. H and L)."
+        )
+
+    return mapping
+
+
+def get_template_residues(
+    pdb_file: str,
+    seq_dict: Dict[str, str],
+    min_identity: float = 0.5,
+) -> Tuple[List, List[str]]:
+    """
+    Return one Bio.PDB residue (or None) per position of the concatenated sequences, taken
+    from the template structure, together with the sequence key each position belongs to.
+    """
+    structure = _parse_structure(pdb_file)
+    chains = {c.id: c for c in structure.get_chains()}
+    mapping = match_template_chains(list(chains), seq_dict)
+
+    residues, keys = [], []
+    for key, seq in seq_dict.items():
+        if key in mapping:
+            chain_residues = [r for r in chains[mapping[key]].get_residues() if r.id[0] == " "]
+            mapped, identity = align_residues_to_sequence(chain_residues, seq)
+            if identity < min_identity:
+                warnings.warn(
+                    f"Template chain {mapping[key]} aligns to sequence {key} with only "
+                    f"{identity:.0%} identity; check that the right template was provided."
+                )
+        else:
+            warnings.warn(f"No template chain found for sequence {key}; it will be predicted without a template.")
+            mapped = [None for _ in seq]
+
+        residues += mapped
+        keys += [key] * len(seq)
+
+    return residues, keys
+
+
+def get_atom_coords(pdb_file: str, seq_dict: Optional[Dict[str, str]] = None):
+    """
+    Backbone (N, CA, C, CB, O) coordinates from a PDB file, ordered by the concatenated
+    sequences in ``seq_dict`` when given (missing positions are zero), else by file order.
+    """
+    if exists(seq_dict):
+        residues, _ = get_template_residues(pdb_file, seq_dict)
     else:
-        residues = list(structure.get_residues())
+        residues = list(_parse_structure(pdb_file).get_residues())
 
-    n_coords = torch.tensor([get_atom_coord(r, 'N') for r in residues])
-    ca_coords = torch.tensor([get_atom_coord(r, 'CA') for r in residues])
-    c_coords = torch.tensor([get_atom_coord(r, 'C') for r in residues])
-    cb_coords = torch.tensor([get_atom_coord(r, 'CB') for r in residues])
-    cb_ca_coords = torch.tensor([get_cb_or_ca_coord(r) for r in residues])
-    o_coords = torch.tensor([get_atom_coord(r, 'O') for r in residues])
+    return residues_to_atom_coords(residues)
 
+
+def residues_to_atom_coords(residues: List):
+    """Backbone (N, CA, C, CB, O) coordinate tensors for a list of Bio.PDB residues (None -> zeros)."""
     atom_coords = {}
-    atom_coords['N'] = n_coords
-    atom_coords['CA'] = ca_coords
-    atom_coords['C'] = c_coords
-    atom_coords['CB'] = cb_coords
-    atom_coords['CBCA'] = cb_ca_coords
-    atom_coords['O'] = o_coords
+    for atom in ["N", "CA", "C", "CB", "O"]:
+        atom_coords[atom] = torch.tensor(np.array([get_atom_coord(r, atom) for r in residues], dtype=np.float32))
+    atom_coords["CBCA"] = torch.tensor(np.array([get_cb_or_ca_coord(r) for r in residues], dtype=np.float32))
 
     place_missing_cb_o(atom_coords)
 
     return atom_coords
 
 
-def get_atom_coords_mask(coords):
-    mask = torch.ByteTensor([1 if sum(_) != 0 else 0 for _ in coords])
-    mask = mask & (1 - torch.any(torch.isnan(coords), dim=1).byte())
-    return mask
-
-
-def get_atom_coords_mask_for_dict(atom_coords):
-    atom_coords_masks = {}
-    for atom, coords in atom_coords.items():
-        atom_coords_masks[atom] = get_atom_coords_mask(coords)
-
-    return atom_coords_masks
-
-
-def pdb2fasta(pdb_file, num_chains=None):
-    """Converts a PDB file to a fasta formatted string using its ATOM data"""
-    pdb_id = basename(pdb_file).split('.')[0]
-    parser = PDBParser()
-    structure = parser.get_structure(
-        pdb_id,
-        pdb_file,
-    )
-
-    real_num_chains = len([0 for _ in structure.get_chains()])
-    if num_chains is not None and num_chains != real_num_chains:
-        print('WARNING: Skipping {}. Expected {} chains, got {}'.format(
-            pdb_file, num_chains, real_num_chains))
-        return ''
-
-    fasta = ''
-    for chain in structure.get_chains():
-        id_ = chain.id
-        seq = seq1(''.join([residue.resname for residue in chain]))
-        fasta += '>{}:{}\t{}\n'.format(pdb_id, id_, len(seq))
-        max_line_length = 80
-        for i in range(0, len(seq), max_line_length):
-            fasta += f'{seq[i:i + max_line_length]}\n'
-    return fasta
-
-
 def get_pdb_chain_seq(
     pdb_file,
     chain_id,
 ):
-    p = PDBParser()
-    file_name = splitext(basename(pdb_file))[0]
-    structure = p.get_structure(
-        file_name,
-        pdb_file,
-    )
-
-    pdb_seq = None
-    for chain in structure.get_chains():
+    for chain in _parse_structure(pdb_file).get_chains():
         if chain.id == chain_id:
-            pdb_seq = "".join(
-                [seq1(r.get_resname()) for r in chain.get_residues()])
+            return "".join([seq1(r.get_resname()) for r in chain.get_residues()])
 
-    return pdb_seq
+    return None
 
 
 def cdr_indices(
@@ -316,64 +246,32 @@ def cdr_indices(
     cdr,
     offset_heavy=True,
 ):
-    """Gets the index of a given CDR loop"""
-    cdr_chothia_range_dict = {
-        "h1": (26, 32),
-        "h2": (52, 56),
-        "h3": (95, 102),
-        "l1": (24, 34),
-        "l2": (50, 56),
-        "l3": (89, 97)
-    }
-
+    """Gets the index of a given CDR loop in a Chothia-numbered PDB file with chains H and L."""
     cdr = str.lower(cdr)
-    assert cdr in cdr_chothia_range_dict.keys()
+    if cdr not in CDR_CHOTHIA_RANGES:
+        raise ValueError(f"Unknown CDR {cdr!r}; expected one of {list(CDR_CHOTHIA_RANGES)}.")
 
-    chothia_range = cdr_chothia_range_dict[cdr]
+    chothia_range = CDR_CHOTHIA_RANGES[cdr]
     chain_id = cdr[0].upper()
 
-    parser = PDBParser()
-    pdb_id = basename(chothia_pdb_file).split('.')[0]
-    structure = parser.get_structure(
-        pdb_id,
-        chothia_pdb_file,
-    )
     cdr_chain_structure = None
-    for chain in structure.get_chains():
+    for chain in _parse_structure(chothia_pdb_file).get_chains():
         if chain.id == chain_id:
             cdr_chain_structure = chain
             break
     if cdr_chain_structure is None:
-        print("PDB must have a chain with chain id \"[PBD ID]:{}\"".format(
-            chain_id))
-        sys.exit(-1)
+        raise ValueError(f"PDB file {chothia_pdb_file} has no chain {chain_id!r}, required for CDR {cdr}.")
 
     residue_id_nums = [res.get_id()[1] for res in cdr_chain_structure]
 
     # Binary search to find the start and end of the CDR loop
-    cdr_start = bisect_left(
-        residue_id_nums,
-        chothia_range[0],
-    )
-    cdr_end = bisect_right(
-        residue_id_nums,
-        chothia_range[1],
-    ) - 1
-
-    if len(get_pdb_chain_seq(
-            chothia_pdb_file,
-            chain_id=chain_id,
-    )) != len(residue_id_nums):
-        print('ERROR in PDB file ' + chothia_pdb_file)
-        print('residue id len', len(residue_id_nums))
+    cdr_start = bisect_left(residue_id_nums, chothia_range[0])
+    cdr_end = bisect_right(residue_id_nums, chothia_range[1]) - 1
 
     if chain_id == "L" and offset_heavy:
-        heavy_seq_len = get_pdb_chain_seq(
-            chothia_pdb_file,
-            chain_id="H",
-        )
-        cdr_start += len(heavy_seq_len)
-        cdr_end += len(heavy_seq_len)
+        heavy_seq = get_pdb_chain_seq(chothia_pdb_file, chain_id="H") or ""
+        cdr_start += len(heavy_seq)
+        cdr_end += len(heavy_seq)
 
     return cdr_start, cdr_end
 
@@ -384,45 +282,138 @@ def get_cdr_range_dict(
     light_only=False,
     offset_heavy=True,
 ):
-    cdr_names = ["h1", "h2", "h3", "l1", "l2", "l3"]
+    cdr_names = list(CDR_CHOTHIA_RANGES)
     if heavy_only:
         cdr_names = cdr_names[:3]
     if light_only:
         cdr_names = cdr_names[3:]
 
-    cdr_range_dict = {
-        cdr: cdr_indices(
-            chothia_pdb_file,
-            cdr,
-            offset_heavy=offset_heavy,
-        )
-        for cdr in cdr_names
-    }
-
-    return cdr_range_dict
+    return {cdr: cdr_indices(chothia_pdb_file, cdr, offset_heavy=offset_heavy) for cdr in cdr_names}
 
 
-def h3_indices(chothia_pdb_file):
-    """Gets the index of the CDR H3 loop"""
-
-    return cdr_indices(chothia_pdb_file, cdr="h3")
+CIF_EXTENSIONS = (".cif", ".mmcif")
+PDB_EXTENSIONS = (".pdb", ".ent")
 
 
-def get_chain_numbering(
-    pdb_file,
-    chain_id,
+def output_format(path: str) -> str:
+    """'cif' or 'pdb', chosen from the file extension (default pdb)."""
+    ext = splitext(path)[1].lower()
+    if ext in CIF_EXTENSIONS:
+        return "cif"
+    if ext in PDB_EXTENSIONS or ext == "":
+        return "pdb"
+    raise ValueError(f"Unsupported structure file extension {ext!r}; use .pdb, .cif or .mmcif.")
+
+
+def build_structure(
+    coords: torch.Tensor,
+    seq: str,
+    chains: List[str],
+    delim: List[int],
+    bfactor: torch.Tensor = None,
+    atoms=("N", "CA", "C", "CB", "O"),
+    structure_id: str = "igfold",
 ):
-    seq = []
-    parser = PDBParser()
-    structure = parser.get_structure("_", pdb_file)
-    for chain in structure.get_chains():
-        if chain.id == chain_id:
-            for r in chain.get_residues():
-                res_num = str(r._id[1]) + r._id[2]
-                res_num = res_num.replace(" ", "")
-                seq.append(res_num)
+    """
+    Build a Bio.PDB Structure from backbone coordinates (residues x atoms x 3).
 
-            return seq
+    :param seq: concatenated one-letter sequence of all chains.
+    :param chains: chain ids, one per chain (single character each).
+    :param delim: cumulative residue count at the end of each chain.
+    :param bfactor: per-residue value written to the B-factor column (IgFold's predicted RMSD).
+    """
+    from Bio.PDB.Atom import Atom
+    from Bio.PDB.Chain import Chain
+    from Bio.PDB.Model import Model
+    from Bio.PDB.Residue import Residue
+    from Bio.PDB.Structure import Structure
+
+    delim = list(delim)
+    if delim[-1] != len(seq):
+        raise ValueError(f"Chain delimiters {delim} do not cover the sequence of length {len(seq)}.")
+    if len(chains) < len(delim):
+        raise ValueError(f"{len(delim)} chains in coordinates but only {len(chains)} chain ids given.")
+    for c in chains:
+        if not (isinstance(c, str) and len(c) == 1 and c.isalnum()):
+            raise ValueError(f"Chain id {c!r} must be a single alphanumeric character for PDB output.")
+    if coords.shape[0] != len(seq) or coords.shape[1] != len(atoms):
+        raise ValueError(f"coords has shape {tuple(coords.shape)}; expected ({len(seq)}, {len(atoms)}, 3).")
+
+    coords = coords.detach().cpu().numpy().astype(np.float32)
+    bfactor = torch.zeros(len(seq)) if not exists(bfactor) else torch.as_tensor(bfactor).detach().cpu()
+
+    structure = Structure(structure_id)
+    model = Model(0)
+    structure.add(model)
+
+    serial, chain_start = 1, 0
+    for chain_num, chain_end in enumerate(delim):
+        chain = Chain(chains[chain_num])
+        model.add(chain)
+        for r in range(chain_start, chain_end):
+            if seq[r] not in _aa_1_3_dict or seq[r] == "-":
+                raise ValueError(f"Cannot write residue {seq[r]!r} at position {r + 1}: not a standard amino acid.")
+            resname = _aa_1_3_dict[seq[r]]
+            residue = Residue((" ", r - chain_start + 1, " "), resname, "    ")
+            chain.add(residue)
+            for a, name in enumerate(atoms):
+                if resname == "GLY" and name == "CB":
+                    continue
+                residue.add(
+                    Atom(
+                        name,
+                        coords[r, a],
+                        round(float(bfactor[r]), 2),
+                        1.0,
+                        " ",
+                        f" {name:<3s}",
+                        serial,
+                        element=name[0],
+                    )
+                )
+                serial += 1
+        chain_start = chain_end
+
+    return structure
+
+
+def write_structure(structure, path: str) -> str:
+    """Write a Bio.PDB Structure as PDB or mmCIF depending on the file extension."""
+    from Bio.PDB.mmcifio import MMCIFIO
+
+    if output_format(path) == "cif":
+        io = MMCIFIO()
+        io.set_structure(structure)
+        io.save(path)
+    else:
+        io = PDBIO()
+        io.set_structure(structure)
+        io.save(path)
+        fix_atom_serials(path)
+
+    return path
+
+
+def structure_to_pdb_string(structure) -> str:
+    from io import StringIO
+
+    io = PDBIO()
+    io.set_structure(structure)
+    buf = StringIO()
+    io.save(buf)
+    return buf.getvalue()
+
+
+def convert_structure_file(in_path: str, out_path: str) -> str:
+    """Convert between PDB and mmCIF (format chosen from each extension)."""
+    from Bio.PDB.MMCIFParser import MMCIFParser
+
+    if output_format(in_path) == "cif":
+        structure = MMCIFParser(QUIET=True).get_structure(splitext(basename(in_path))[0], in_path)[0]
+    else:
+        structure = _parse_structure(in_path)
+
+    return write_structure(structure, out_path)
 
 
 def save_PDB(
@@ -432,50 +423,23 @@ def save_PDB(
     chains: List[str] = None,
     error: torch.Tensor = None,
     delim: Union[int, List[int]] = None,
-    atoms=['N', 'CA', 'C', 'O', 'CB'],
+    atoms=("N", "CA", "C", "CB", "O"),
     write_pdb=True,
-) -> None:
-    """
-    Write set of N, CA, C, O, CB coords to PDB file
-    """
-
+) -> str:
+    """Write backbone coords to a PDB (or mmCIF) file and return the PDB-format string
+    (convenience wrapper around :func:`build_structure` and :func:`write_structure`)."""
     if not exists(chains):
         chains = ["H", "L"]
+    if not exists(delim):
+        delim = [len(seq)]
+    elif isinstance(delim, int):
+        delim = [delim, len(seq)]
 
-    if type(delim) == type(None):
-        delim = -1
-    elif type(delim) == int:
-        delim = [delim]
-
-    if not exists(error):
-        error = torch.zeros(len(seq))
-
-    pdb_string = ""
-    k = 0
-    for r, residue in enumerate(coords):
-        AA = _aa_1_3_dict[seq[r]]
-        for a, atom in enumerate(residue):
-            chain_num = np.where(np.array(delim) - r > 0)[0][0]
-            chain_id = chains[chain_num]
-
-            if AA == "GLY" and atoms[a] == "CB": continue
-            x, y, z = atom
-            pdb_string += "ATOM  %5d  %-2s  %3s %s%4d    %8.3f%8.3f%8.3f  %4.2f  %4.2f           %s  \n" % (
-                k + 1, atoms[a], AA, chain_id, r + 1, x, y, z, 1, error[r], atoms[a][0])
-            k += 1
-
-        if r + 1 == delim[chain_num]:
-            pdb_string += "TER   %5d      %3s %s%4d\n" % (
-                k + 1, AA, chain_id, r + 1)
-            k += 1
-                
-    pdb_string += "END\n"
-
+    structure = build_structure(coords, seq, chains, delim, bfactor=error, atoms=atoms)
     if write_pdb:
-        with open(out_pdb, "w") as f:
-            f.write(pdb_string)
+        write_structure(structure, out_pdb)
 
-    return pdb_string
+    return structure_to_pdb_string(structure)
 
 
 def write_pdb_bfactor(
@@ -484,32 +448,55 @@ def write_pdb_bfactor(
     bfactor,
     b_chain=None,
 ):
-    parser = PDBParser()
-    with warnings.catch_warnings(record=True):
-        structure = parser.get_structure(
-            "_",
-            in_pdb_file,
-        )
+    """Set the per-residue B-factor column (used by IgFold to store predicted RMSD)."""
+    structure = _parse_structure(in_pdb_file)
 
     i = 0
     for chain in structure.get_chains():
-        if exists(b_chain) and chain._id != b_chain:
+        if exists(b_chain) and chain.id != b_chain:
             continue
 
         for r in chain.get_residues():
-            [a.set_bfactor(bfactor[i]) for a in r.get_atoms()]
+            for a in r.get_atoms():
+                a.set_bfactor(float(bfactor[i]))
             i += 1
 
     io = PDBIO()
     io.set_structure(structure)
     io.save(out_pdb_file)
+    fix_atom_serials(out_pdb_file)
 
 
-def clean_pdb(pdb_file):
-    with open(pdb_file, "r") as f:
+def fix_atom_serials(pdb_file):
+    """Renumber ATOM/HETATM/TER serial numbers consecutively and remap CONECT records."""
+    with open(pdb_file) as f:
         lines = f.readlines()
 
+    serial_map, serial, changed = {}, 1, False
+    new_lines = []
+    for line in lines:
+        rec = line[:6]
+        if rec in ("ATOM  ", "HETATM", "TER   "):
+            old = line[6:11].strip()
+            if rec != "TER   " and old.isdigit():
+                serial_map[int(old)] = serial  # CONECT only ever references atoms
+            new_line = f"{rec}{serial:5d}{line[11:]}"
+            changed |= new_line != line
+            line = new_line
+            serial += 1
+        new_lines.append(line)
+
+    if not changed:
+        return
+
+    out = []
+    for line in new_lines:
+        if line.startswith("CONECT"):
+            body = line.rstrip("\n")[6:]
+            fields = [body[i : i + 5] for i in range(0, len(body), 5)]
+            fields = [f"{serial_map.get(int(f), int(f)):5d}" if f.strip().isdigit() else f for f in fields]
+            line = "CONECT" + "".join(fields) + "\n"
+        out.append(line)
+
     with open(pdb_file, "w") as f:
-        for l in lines:
-            if "ATOM" in l:
-                f.write(l)
+        f.writelines(out)

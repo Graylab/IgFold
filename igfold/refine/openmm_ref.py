@@ -1,11 +1,24 @@
-import pdbfixer
 import openmm
+import openmm.app
+import openmm.unit
+import pdbfixer
 
 ENERGY = openmm.unit.kilocalories_per_mole
 LENGTH = openmm.unit.angstroms
+# OpenMM >= 8 expresses the minimizer tolerance as a force (energy / length) rather than an energy.
+FORCE = openmm.unit.kilojoules_per_mole / openmm.unit.nanometer
 
-def refine(pdb_file, stiffness=10., tolerance=2.39, use_gpu=False):
-    tolerance = tolerance * ENERGY
+
+def _tolerance_quantity(tolerance):
+    """Convert a kcal/mol tolerance to the unit expected by the installed OpenMM version."""
+    if int(openmm.__version__.split(".")[0]) >= 8:
+        # 2.39 kcal/mol was the OpenMM 7 default; 10 kJ/mol/nm is the OpenMM 8 default.
+        return (tolerance / 2.39) * 10.0 * FORCE
+    return tolerance * ENERGY
+
+
+def refine(pdb_file, stiffness=10.0, tolerance=2.39, use_gpu=False):
+    tolerance = _tolerance_quantity(tolerance)
     stiffness = stiffness * ENERGY / (LENGTH**2)
 
     fixer = pdbfixer.PDBFixer(pdb_file)
@@ -25,8 +38,7 @@ def refine(pdb_file, stiffness=10., tolerance=2.39, use_gpu=False):
     for residue in modeller.topology.residues():
         for atom in residue.atoms():
             if atom.name in ["N", "CA", "C", "CB"]:
-                force.addParticle(atom.index,
-                                    modeller.positions[atom.index])
+                force.addParticle(atom.index, modeller.positions[atom.index])
     system.addForce(force)
 
     integrator = openmm.LangevinIntegrator(0, 0.01, 1.0)
@@ -41,4 +53,5 @@ def refine(pdb_file, stiffness=10., tolerance=2.39, use_gpu=False):
             simulation.topology,
             simulation.context.getState(getPositions=True).getPositions(),
             f,
-            keepIds=True,)
+            keepIds=True,
+        )

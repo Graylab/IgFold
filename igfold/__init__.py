@@ -1,3 +1,7 @@
+__version__ = "1.0.0"
+
 from .model.IgFold import IgFold
 from .model.interface import IgFoldInput, IgFoldOutput
-from .IgFoldRunner import IgFoldRunner
+from .runner import IgFoldRunner
+
+__all__ = ["IgFold", "IgFoldInput", "IgFoldOutput", "IgFoldRunner", "__version__"]

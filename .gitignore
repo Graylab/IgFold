@@ -133,4 +133,5 @@ dmypy.json
 .vscode/
 trained_models/
 demo_data/
-scripts/
+scripts/# pixi
+.pixi/

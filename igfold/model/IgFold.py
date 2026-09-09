@@ -1,22 +1,29 @@
-import os
-from einops import rearrange, repeat
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
+from einops import rearrange, repeat
 
-from igfold.model.interface import *
-from igfold.model.components import TriangleGraphTransformer, IPAEncoder, IPATransformer
+from igfold.model.components import IPAEncoder, IPATransformer, TriangleGraphTransformer
+from igfold.model.interface import IgFoldInput, IgFoldOutput
+from igfold.training.utils import bb_prmsd_l1, bond_length_l1, kabsch, kabsch_mse, violation_loss
 from igfold.utils.coordinates import get_ideal_coords, place_o_coords
-from igfold.utils.transforms import quaternion_to_matrix
-from igfold.training.utils import *
 from igfold.utils.general import exists
+from igfold.utils.transforms import quaternion_to_matrix
 
 ATOM_DIM = 3
 
 
-class IgFold(pl.LightningModule):
+class IgFold(nn.Module):
+    """
+    IgFold structure prediction model.
+
+    :param config: dict with the architecture hyperparameters (see
+        ``igfold.utils.checkpoint.MODEL_CONFIG_KEYS``). Extra keys are kept in ``self.config``
+        but ignored by the network; ``rmsd_clamp`` is used when computing training losses.
+    :param config_overwrite: optional dict of overrides applied on top of ``config``.
+    """
+
     def __init__(
         self,
         config,
@@ -24,10 +31,10 @@ class IgFold(pl.LightningModule):
     ):
         super().__init__()
 
-        self.save_hyperparameters()
-        config = self.hparams.config
+        config = dict(config)
         if exists(config_overwrite):
             config.update(config_overwrite)
+        self.config = config
 
         self.bert_feat_dim = 512
         self.bert_attn_dim = 64
@@ -111,6 +118,10 @@ class IgFold(pl.LightningModule):
             4,
         )
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
+
     def get_coords_tran_rot(
         self,
         temp_coords,
@@ -152,7 +163,7 @@ class IgFold(pl.LightningModule):
         align_mask = input.align_mask
 
         batch_size = embeddings[0].shape[0]
-        seq_lens = [max(e.shape[1], 0) for e in embeddings]
+        seq_lens = [e.shape[1] for e in embeddings]
         seq_len = sum(seq_lens)
 
         if not exists(temp_coords):
@@ -182,7 +193,7 @@ class IgFold(pl.LightningModule):
             ).bool()
 
         align_mask = align_mask & batch_mask  # Should already be masked by batch_mask anyway
-        temp_coords[~temp_mask] = 0.
+        temp_coords[~temp_mask] = 0.0
         for i, (tc, m) in enumerate(zip(temp_coords, temp_mask)):
             temp_coords[i][m] -= tc[m].mean(-2)
 
@@ -207,16 +218,24 @@ class IgFold(pl.LightningModule):
         align_mask = input.align_mask
         return_embeddings = input.return_embeddings
 
-        res_batch_mask = rearrange(
-            batch_mask,
-            "b (l a) -> b l a",
-            a=4,
-        ).all(-1).to(self.device)
-        res_temp_mask = rearrange(
-            temp_mask,
-            "b (l a) -> b l a",
-            a=4,
-        ).all(-1).to(self.device)
+        res_batch_mask = (
+            rearrange(
+                batch_mask,
+                "b (l a) -> b l a",
+                a=4,
+            )
+            .all(-1)
+            .to(self.device)
+        )
+        res_temp_mask = (
+            rearrange(
+                temp_mask,
+                "b (l a) -> b l a",
+                a=4,
+            )
+            .all(-1)
+            .to(self.device)
+        )
 
         ### Model forward pass
 
@@ -228,7 +247,7 @@ class IgFold(pl.LightningModule):
         for i, (a, l) in enumerate(zip(attentions, seq_lens)):
             a = rearrange(a, "b n h l1 l2 -> b l1 l2 (n h)")
             cum_l = sum(seq_lens[:i])
-            bert_attn[:, cum_l:cum_l + l, cum_l:cum_l + l, :] = a
+            bert_attn[:, cum_l : cum_l + l, cum_l : cum_l + l, :] = a
 
         temp_translations, temp_rotations = self.get_coords_tran_rot(
             temp_coords,
@@ -250,6 +269,7 @@ class IgFold(pl.LightningModule):
             rotations=temp_rotations,
             pairwise_repr=str_edges,
             mask=res_temp_mask,
+            key_padding_mask=res_batch_mask,
         )
         structure_embs = str_nodes
 
@@ -259,7 +279,9 @@ class IgFold(pl.LightningModule):
             quaternions=None,
             pairwise_repr=str_edges,
             mask=res_batch_mask,
+            key_padding_mask=res_batch_mask,
         )
+        ipa_coords = place_o_coords(ipa_coords[:, :, :4], seq_lens=seq_lens)
         ipa_rotations = quaternion_to_matrix(ipa_quaternions)
 
         dev_nodes = self.dev_node_transform(bert_feats)
@@ -270,6 +292,7 @@ class IgFold(pl.LightningModule):
             rotations=ipa_rotations.detach(),
             pairwise_repr=dev_edges,
             mask=res_batch_mask,
+            key_padding_mask=res_batch_mask,
         )
         dev_pred = F.relu(self.dev_linear(dev_out_feats))
         dev_pred = rearrange(dev_pred, "b l a -> b (l a)", a=4)
@@ -289,7 +312,7 @@ class IgFold(pl.LightningModule):
             device=self.device,
         )
         if exists(coords_label):
-            rmsd_clamp = self.hparams.config["rmsd_clamp"]
+            rmsd_clamp = self.config.get("rmsd_clamp", 0.0)
             coords_loss = kabsch_mse(
                 flat_coords,
                 coords_label,
@@ -299,11 +322,9 @@ class IgFold(pl.LightningModule):
             )
 
             bb_coords_label = rearrange(
-                rearrange(coords_label, "b (l a) d -> b l a d", a=4)[:, :, :3],
-                "b l a d -> b (l a) d")
-            bb_batch_mask = rearrange(
-                rearrange(batch_mask, "b (l a) -> b l a", a=4)[:, :, :3],
-                "b l a -> b (l a)")
+                rearrange(coords_label, "b (l a) d -> b l a d", a=4)[:, :, :3], "b l a d -> b (l a) d"
+            )
+            bb_batch_mask = rearrange(rearrange(batch_mask, "b (l a) -> b l a", a=4)[:, :, :3], "b l a -> b (l a)")
             bondlen_loss = bond_length_l1(
                 bb_coords,
                 bb_coords_label,
@@ -314,14 +335,13 @@ class IgFold(pl.LightningModule):
             cum_seq_lens = np.cumsum([0] + seq_lens)
             for sl_i, sl in enumerate(seq_lens):
                 align_mask_ = align_mask.clone()
-                align_mask_[:, :cum_seq_lens[sl_i]] = False
-                align_mask_[:, cum_seq_lens[sl_i + 1]:] = False
+                align_mask_[:, : cum_seq_lens[sl_i]] = False
+                align_mask_[:, cum_seq_lens[sl_i + 1] :] = False
                 res_batch_mask_ = res_batch_mask.clone()
-                res_batch_mask_[:, :cum_seq_lens[sl_i]] = False
-                res_batch_mask_[:, cum_seq_lens[sl_i + 1]:] = False
+                res_batch_mask_[:, : cum_seq_lens[sl_i]] = False
+                res_batch_mask_[:, cum_seq_lens[sl_i + 1] :] = False
 
-                if sl == 0 or align_mask_.sum() == 0 or res_batch_mask_.sum(
-                ) == 0:
+                if sl == 0 or align_mask_.sum() == 0 or res_batch_mask_.sum() == 0:
                     continue
 
                 prmsd_loss.append(
@@ -331,15 +351,16 @@ class IgFold(pl.LightningModule):
                         coords_label,
                         align_mask=align_mask_,
                         mask=res_batch_mask_,
-                    ))
+                    )
+                )
             prmsd_loss = sum(prmsd_loss)
 
             coords_loss, bondlen_loss = list(
                 map(
-                    lambda l: rearrange(l, "(c b) -> b c", b=batch_size).mean(
-                        1),
+                    lambda l: rearrange(l, "(c b) -> b c", b=batch_size).mean(1),
                     [coords_loss, bondlen_loss],
-                ))
+                )
+            )
 
             loss += sum([coords_loss, bondlen_loss, prmsd_loss])
         else:
@@ -368,7 +389,7 @@ class IgFold(pl.LightningModule):
         )
 
         return output
-    
+
     def score_coords(
         self,
         input: IgFoldInput,
@@ -396,8 +417,9 @@ class IgFold(pl.LightningModule):
             rotations=str_rotations.detach(),
             pairwise_repr=dev_edges,
             mask=res_batch_mask,
+            key_padding_mask=res_batch_mask,
         )
-        dev_pred = F.relu(self.dev_linear(dev_out_feats)).squeeze(-1)
+        dev_pred = F.relu(self.dev_linear(dev_out_feats))
         dev_pred = rearrange(dev_pred, "b l a -> b (l a)", a=4)
 
         return dev_pred
@@ -414,7 +436,7 @@ class IgFold(pl.LightningModule):
             l=n,
         )
         points_global = torch.einsum(
-            'b n a c, b n c d -> b n a d',
+            "b n a c, b n c d -> b n a d",
             ideal_coords,
             rotations,
         ) + rearrange(
@@ -439,8 +461,7 @@ class IgFold(pl.LightningModule):
         ).all(-1)
         translations, rotations = output.translations, output.rotations
 
-        in_coords = self.transform_ideal_coords(translations,
-                                                rotations).detach()
+        in_coords = self.transform_ideal_coords(translations, rotations).detach()
         in_flat_coords = rearrange(
             in_coords[:, :, :4],
             "b l a d -> b (l a) d",
@@ -471,18 +492,18 @@ class IgFold(pl.LightningModule):
                     mask=batch_mask,
                 )
 
-                output.translations = translations
-                output.rotations = rotations
-
                 loss = rmsd + viol_loss
 
-                loss.backward()
+                loss.sum().backward()
                 optimizer.step()
+
+            output.translations = translations.detach()
+            output.rotations = rotations.detach()
+            coords = self.transform_ideal_coords(output.translations, output.rotations)
 
         prmsd = self.score_coords(input, output)
 
-        coords = place_o_coords(coords)
-        output.coords = coords
+        output.coords = place_o_coords(coords, seq_lens=seq_lens)
         output.prmsd = prmsd
 
         return output

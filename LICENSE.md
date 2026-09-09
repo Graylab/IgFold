@@ -21,4 +21,3 @@ Licensee agrees that any publication of results obtained with the Software will 
 Licensee’s rights under this License terminate automatically without notice from JHU if Licensee fail to comply with any term(s) of this License.
 
 This License shall be governed by the laws of the State of Maryland, excluding the application of its conflicts of law rules. Licensee agrees that any dispute shall be appropriate only in the state and federal courts located within the State of Maryland.
-

@@ -1,11 +1,20 @@
-from einops import rearrange, repeat
 import numpy as np
 import torch
 import torch.nn.functional as F
+from einops import rearrange, repeat
 
-from igfold.utils.constants import *
+from igfold.utils.constants import (
+    BA_C_N_CA,
+    BA_CA_C_N,
+    BL_C_N,
+    BL_CA_C,
+    BL_N_CA,
+    EPS,
+    VDW_C,
+    VDW_N,
+)
 from igfold.utils.general import exists
-from igfold.utils.geometry import dist, angle, dihedral
+from igfold.utils.geometry import angle, dihedral, dist
 
 
 def kabsch(
@@ -31,23 +40,19 @@ def kabsch(
     C = torch.einsum("... x l, ... y l -> ... x y", X_, Y_)
 
     # Optimal rotation matrix via SVD
-    if int(torch.__version__.split(".")[1]) < 8:
-        # warning! int torch 1.<8 : W must be transposed
-        V, S, W = torch.svd(C)
-        W = rearrange(W, "... a b -> ... b a")
-    else:
-        V, S, W = torch.linalg.svd(C)
+    V, S, W = torch.linalg.svd(C)
 
     # determinant sign for direction correction
-    v_det = torch.det(V.to("cpu")).to(X.device)
-    w_det = torch.det(W.to("cpu")).to(X.device)
+    v_det = torch.linalg.det(V)
+    w_det = torch.linalg.det(W)
     d = (v_det * w_det) < 0.0
     if d.any():
-        S[d] = S[d] * (-1)
-        V[d, :] = V[d, :] * (-1)
+        # reflection: flip the singular vector with the smallest singular value
+        V = V.clone()
+        V[d, :, -1] = -V[d, :, -1]
 
     # Create Rotation matrix U
-    U = torch.matmul(V, W)  #.to(device)
+    U = torch.matmul(V, W)  # .to(device)
 
     U = rearrange(
         U,
@@ -65,11 +70,9 @@ def kabsch(
     if return_translation_rotation:
         return XT, U, YT
 
-    transform = lambda coords: torch.einsum(
-        "... l d, ... x d -> ... l x",
-        coords - XT,
-        U,
-    ) + YT
+    def transform(coords):
+        return torch.einsum("... l d, ... x d -> ... l x", coords - XT, U) + YT
+
     mobile = transform(mobile)
 
     return mobile, transform
@@ -102,7 +105,7 @@ def kabsch_mse(
     target,
     align_mask=None,
     mask=None,
-    clamp=0.,
+    clamp=0.0,
     sqrt=False,
 ):
     aligned_target = do_kabsch(
@@ -113,7 +116,7 @@ def kabsch_mse(
     mse = F.mse_loss(
         pred,
         aligned_target,
-        reduction='none',
+        reduction="none",
     ).mean(-1)
 
     if clamp > 0:
@@ -151,7 +154,11 @@ def bond_length_l1(
             target_lens = torch.norm(t[:-o] - t[o:], dim=-1)
 
             losses.append(
-                torch.abs(pred_lens[m_] - target_lens[m_], ).mean() / o)
+                torch.abs(
+                    pred_lens[m_] - target_lens[m_],
+                ).mean()
+                / o
+            )
 
     return torch.stack(losses)
 
@@ -172,7 +179,7 @@ def bb_prmsd_l1(
     loss = F.l1_loss(
         pdev,
         bb_dev,
-        reduction='none',
+        reduction="none",
     )
 
     if exists(mask):
@@ -191,13 +198,14 @@ def bb_prmsd_l1(
 
     return loss
 
+
 def bond_len_loss(pred, seq_lens, mask, eps=EPS):
     b, l, a, d = pred.shape
 
     pred_bb = pred[:, :, :3]
-    mask = repeat(mask, "b l -> b (l 3)")
-    for seq_len in seq_lens:
-        mask[:, 3 * seq_len - 1] = 0
+    mask = repeat(mask, "b l -> b (l 3)").clone()
+    for chain_end in np.cumsum(seq_lens):
+        mask[:, 3 * chain_end - 1] = 0
     mask_bb = mask[:, :-1] * mask[:, 1:]
 
     pred_bond_lens = dist(
@@ -221,8 +229,9 @@ def bond_len_loss(pred, seq_lens, mask, eps=EPS):
 def bond_angle_loss(pred, seq_lens, mask, eps=EPS):
     b, l, a, d = pred.shape
 
-    for seq_len in seq_lens:
-        mask[:, seq_len - 1] = 0
+    mask = mask.clone()
+    for chain_end in np.cumsum(seq_lens):
+        mask[:, chain_end - 1] = 0
     mask_ = mask[:, 1:] * mask[:, :-1]
 
     N, CA, C, CB = pred.unbind(-2)
@@ -244,11 +253,11 @@ def vdw_clash_loss(pred, mask, tol=1.5, eps=EPS):
     b, l, a, d = pred.shape
 
     mask_ = repeat(mask, "b l -> b (l a)", a=a)
-    mask_ = (mask_.unsqueeze(-1) * mask_.unsqueeze(-2))
+    mask_ = mask_.unsqueeze(-1) * mask_.unsqueeze(-2)
 
     vdw_radii = torch.tensor([VDW_N, VDW_C, VDW_C, VDW_C])
     vdw_radii = repeat(vdw_radii, "a -> b (l a)", b=b, l=l)
-    vdw_distances = (vdw_radii.unsqueeze(-2) + vdw_radii.unsqueeze(-3))
+    vdw_distances = vdw_radii.unsqueeze(-2) + vdw_radii.unsqueeze(-3)
     vdw_distances = vdw_distances.to(pred.device)
 
     pred_ = rearrange(pred, "b l a d -> b (l a) d")
@@ -261,8 +270,9 @@ def vdw_clash_loss(pred, mask, tol=1.5, eps=EPS):
 
 
 def cis_peptide_loss(pred, seq_lens, mask, eps=EPS):
-    for seq_len in seq_lens:
-        mask[:, seq_len - 1] = 0
+    mask = mask.clone()
+    for chain_end in np.cumsum(seq_lens):
+        mask[:, chain_end - 1] = 0
     mask_ = mask[:, 1:] * mask[:, :-1]
 
     N, CA, C, _ = pred.unbind(-2)

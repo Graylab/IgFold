@@ -1,2 +1,3 @@
-include igfold/trained_models/IgFold/*
+include igfold/trained_models/IgFold/*.safetensors
+include igfold/trained_models/IgFold/LICENSE.md
 include LICENSE.md

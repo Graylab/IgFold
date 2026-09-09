@@ -44,7 +44,7 @@ def get_min_mover(
     min_mover = pyrosetta.rosetta.protocols.minimization_packing.MinMover(
         mmap,
         sf,
-        'lbfgs_armijo_nonmonotone',
+        "lbfgs_armijo_nonmonotone",
         0.0001,
         True,
     )
@@ -54,13 +54,12 @@ def get_min_mover(
     return min_mover
 
 
-def get_fa_relax_mover(
-        max_iter: int = 100) -> pyrosetta.rosetta.protocols.moves.Mover:
+def get_fa_relax_mover(max_iter: int = 100) -> pyrosetta.rosetta.protocols.moves.Mover:
     """
     Create full-atom relax mover
     """
 
-    sf = pyrosetta.create_score_function('ref2015_cst')
+    sf = pyrosetta.create_score_function("ref2015_cst")
 
     mmap = pyrosetta.rosetta.core.kinematics.MoveMap()
     mmap.set_bb(True)
@@ -77,23 +76,16 @@ def get_fa_relax_mover(
 
 def get_repack_mover():
     tf = pyrosetta.rosetta.core.pack.task.TaskFactory()
-    tf.push_back(
-        pyrosetta.rosetta.core.pack.task.operation.InitializeFromCommandline())
-    tf.push_back(
-        pyrosetta.rosetta.core.pack.task.operation.RestrictToRepacking())
+    tf.push_back(pyrosetta.rosetta.core.pack.task.operation.InitializeFromCommandline())
+    tf.push_back(pyrosetta.rosetta.core.pack.task.operation.RestrictToRepacking())
 
-    packer = pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover(
-    )
+    packer = pyrosetta.rosetta.protocols.minimization_packing.PackRotamersMover()
     packer.task_factory(tf)
 
     return packer
 
 
-def refine(out_pdb_file,
-           pdb_string,
-           minimization_iter=100,
-           constrain=True,
-           idealize=False):
+def refine(out_pdb_file, pdb_string, minimization_iter=100, constrain=True, idealize=False):
     # create new pose
     pose = pyrosetta.rosetta.core.pose.Pose()
     pyrosetta.rosetta.core.import_pose.pose_from_pdbstring(
