@@ -1215,8 +1215,8 @@ packages:
   requires_python: '>=3.9'
 - pypi: ./
   name: igfold
-  version: 1.0.0
-  sha256: 76bbcad83a9dc20a9496264d75f8ee05c0c6a061222eec326ef75848b47c9bd8
+  version: 1.0.1
+  sha256: 0f6e7387a28bc4686327caefeabd286384388c5b896c5b9609f0d12ecfd172fe
   requires_dist:
   - antiberty>=1.0.0
   - biopython>=1.79

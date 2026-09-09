@@ -17,12 +17,6 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           environments: dev
-      - name: Fetch pre-trained IgFold weights
-        # Taken from the published PyPI wheel and converted to safetensors.
-        run: |
-          pixi run -e dev python -m pip download igfold==0.4.0 --no-deps -d /tmp/wheels
-          unzip -o -q /tmp/wheels/igfold-0.4.0-py3-none-any.whl 'igfold/trained_models/*' -d /tmp/igfold_wheel
-          pixi run -e dev igfold convert-weights /tmp/igfold_wheel/igfold/trained_models/IgFold/*.ckpt
       - name: Cache Hugging Face Hub downloads
         uses: actions/cache@v4
         with:
@@ -31,6 +25,4 @@ jobs:
       - name: Lint
         run: pixi run -e dev pre-commit run --all-files --show-diff-on-failure
       - name: Test
-        env:
-          IGFOLD_WEIGHTS_DIR: /tmp/igfold_wheel/igfold/trained_models/IgFold
         run: pixi run -e dev pytest -q

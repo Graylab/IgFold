@@ -8,6 +8,8 @@ Try antibody structure prediction in [Google Colab](https://colab.research.googl
 
 ## Updates
 ```
+ - Version 1.0.1
+   - Pre-trained weights are stored in the repository and included in the wheel (1.0.0 wheels shipped without them)
  - Version 1.0.0
    - Requires PyTorch >= 2.0 and transformers >= 4.36 (5.x supported); PyTorch-Lightning is no longer a dependency
    - Model weights in safetensors format (`igfold convert-weights` converts .ckpt files); AntiBERTy weights
@@ -49,12 +51,11 @@ environment is enough.
 
 ### Pre-trained weights
 
-The four pre-trained model weights (`igfold_*.safetensors`, 25 MB in total) are not stored in this
-repository. They are distributed with the PyPI package; to use them with a clone, copy the
-`igfold/trained_models/IgFold/` directory from an installed package into the clone, or point the
-`IGFOLD_WEIGHTS_DIR` environment variable at any directory containing them. Legacy `.ckpt` weights
-from IgFold <= 0.4.0 are converted automatically on first use (or explicitly with
-`igfold convert-weights`).
+The four pre-trained model weights (`igfold/trained_models/IgFold/igfold_*.safetensors`, 25 MB in
+total) are stored in this repository and included in the PyPI package. To use weights from another
+location, point the `IGFOLD_WEIGHTS_DIR` environment variable (or `--weights-dir`) at a directory
+containing them. Legacy `.ckpt` weights from IgFold <= 0.4.0 are converted automatically on first
+use (or explicitly with `igfold convert-weights`).
 
 The AntiBERTy language-model weights (about 100 MB) are downloaded from
 [huggingface.co/jeffruffolo/AntiBERTy](https://huggingface.co/jeffruffolo/AntiBERTy) on first use

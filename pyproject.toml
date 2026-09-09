@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "igfold"
-version = "1.0.0"
+version = "1.0.1"
 description = "Fast, accurate antibody structure prediction from deep learning on massive set of natural antibodies"
 readme = "README.md"
 license-files = ["LICENSE.md"]
